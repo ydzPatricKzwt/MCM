@@ -1,0 +1,344 @@
+\begin{lstlisting}[language=Python, keywordstyle=\color{blue!70}, commentstyle=\color{red!50!green!50!blue!50}, frame=shadowbox, rulesepcolor=\color{red!20!green!20!blue!20}]
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+p1_fixed.py —— 高教社杯 C 题 · 问题 1
+修复要点
+  • 过滤“乡村种植的农作物”说明行，保证 CROP 与模板列一一对应
+  • _season_bases 不再 +1
+  • 不用固定 offset，改为 “地块名 → 行号” 映射写入
+"""
+
+import argparse, pathlib, random, re, warnings
+from concurrent.futures import ProcessPoolExecutor
+
+import numpy as np
+import pandas as pd
+from deap import base, creator, tools
+from openpyxl import load_workbook
+from openpyxl.utils import range_boundaries
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# ---------------- CLI ----------------
+cli = argparse.ArgumentParser()
+cli.add_argument("--pop", type=int, default=240)
+cli.add_argument("--gen", type=int, default=450)
+cli.add_argument("--case", choices=["waste", "discount", "both"], default="both")
+cli.add_argument("--seed", type=int, default=42)
+ARGS = cli.parse_args()
+random.seed(ARGS.seed)
+np.random.seed(ARGS.seed)
+
+ROOT = pathlib.Path(__file__).resolve().parent
+F_LAND, F_STATS = ROOT / "附件1.xlsx", ROOT / "附件2.xlsx"
+F_R11, F_R12 = ROOT / "result1_1.xlsx", ROOT / "result1_2.xlsx"
+
+# ---------------- 读数据 ----------------
+land_df = pd.read_excel(F_LAND, "乡村的现有耕地")
+crop_df_raw = pd.read_excel(F_LAND, "乡村种植的农作物")
+crop_df = crop_df_raw[crop_df_raw["作物编号"].notna()]           # 过滤说明行
+area23 = pd.read_excel(F_STATS, "2023年的农作物种植情况")
+stats23 = pd.read_excel(F_STATS, "2023年统计的相关数据")
+
+LAND = land_df["地块名称"].tolist()
+CROP = crop_df["作物名称"].tolist()
+land_type = land_df.set_index("地块名称")["地块类型"].to_dict()
+land_area = land_df.set_index("地块名称")["地块面积/亩"].to_dict()
+area_half = np.array([0.5 * land_area[l] for l in LAND], dtype=np.float32)
+
+crop_type = (
+    crop_df.set_index("作物名称")["作物类型"].fillna("").str.strip().to_dict()
+)
+
+def _mean_price(txt: str):
+    nums = re.findall(r"[\d.]+", str(txt))
+    return sum(map(float, nums)) / len(nums) if nums else np.nan
+
+stats23["均价"] = stats23["销售单价/(元/斤)"].apply(_mean_price)
+agg = (
+    stats23.groupby("作物名称").agg(
+        yld=("亩产量/斤", "mean"),
+        cost=("种植成本/(元/亩)", "mean"),
+        price=("均价", "mean"),
+    )
+)
+yield_c = {k: 0 if pd.isna(v) else v for k, v in agg["yld"].items()}
+cost_c = {k: 0 if pd.isna(v) else v for k, v in agg["cost"].items()}
+price_c = {k: 0 if pd.isna(v) else v for k, v in agg["price"].items()}
+
+prod23 = (
+    area23.merge(stats23[["作物名称", "亩产量/斤"]], on="作物名称")
+    .assign(prod=lambda d: d["种植面积/亩"] * d["亩产量/斤"])
+)
+demand_c = prod23.groupby("作物名称")["prod"].sum().to_dict()
+
+BEANS = [c for c, t in crop_type.items() if "豆" in t]
+RICE = ["水稻"] if "水稻" in CROP else []
+BEAN_SET = np.array([CROP.index(c) + 1 for c in BEANS], dtype=np.int16)
+RICE_SET = np.array([CROP.index(c) + 1 for c in RICE], dtype=np.int16)
+
+# ---------------- 维度 ----------------
+YEARS = list(range(2024, 2031))
+SEASONS = [0, 1]  # 0 = 第一季
+L, Y, S, C = len(LAND), len(YEARS), 2, len(CROP)
+GENE = L * Y * S
+
+# ---------------- GA ----------------
+creator.create("Fitness", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.Fitness)
+tb = base.Toolbox()
+tb.register("gene", lambda: random.randint(0, C))
+tb.register(
+    "individual",
+    lambda: creator.Individual([tb.gene() for _ in range(GENE)]),
+)
+tb.register("population", tools.initRepeat, list, tb.individual)
+
+# -------- 合法掩码
+compat = np.zeros((L, C + 1, S), bool)
+for li, l in enumerate(LAND):
+    lt = land_type[l]
+    for ci, c in enumerate(CROP, 1):
+        ct = crop_type[c]
+        for si in SEASONS:
+            ok = False
+            if lt == "普通大棚":
+                ok = (si == 0 and ct.startswith("蔬菜")) or (
+                    si == 1 and ct == "食用菌"
+                )
+            elif lt == "智慧大棚":
+                ok = ct.startswith("蔬菜")
+            elif lt == "水浇地":
+                ok = (c in RICE and si == 0) or ct.startswith("蔬菜")
+            else:  # 平旱地 / 梯田 / 山坡地
+                ok = si == 0 and ct.startswith("粮食")
+            compat[li, ci, si] = ok
+
+
+def decode(ind):
+    plan = (
+        np.frombuffer(np.array(ind, np.int16), np.int16)
+        .reshape(L, Y, S)
+        .copy()
+    )
+    bad = ~compat[np.arange(L)[:, None, None], plan, np.arange(S)]
+    plan[bad] = 0
+    return plan.astype(np.int16)
+
+
+def pure_profit(plan, case):
+    prod = np.zeros((C + 1, Y))
+    cost = 0
+    for li in range(L):
+        for yi in range(Y):
+            for si in range(S):
+                ci = plan[li, yi, si]
+                if not ci:
+                    continue
+                cn = CROP[ci - 1]
+                prod[ci, yi] += area_half[li] * yield_c.get(cn, 0)
+                cost += area_half[li] * cost_c.get(cn, 0)
+    rev = 0
+    for ci in range(1, C + 1):
+        price = price_c.get(CROP[ci - 1], 0)
+        for yi in range(Y):
+            p = prod[ci, yi]
+            d = demand_c.get(CROP[ci - 1], 0)
+            rev += min(p, d) * price + (
+                0 if case == "waste" else max(0, p - d) * price * 0.5
+            )
+    return rev - cost
+
+
+# ---- 罚分
+P_AREA = P_ROTA = P_BEAN = 1e7
+P_SCAT = 1e5
+MAX_PLOTS = 10
+
+
+def fitness(case, ind):
+    plan = decode(ind)
+    profit = pure_profit(plan, case)
+    pen = 0
+    pen += P_AREA * (
+        ((plan > 0).sum(2) * area_half[:, None] < area_half[:, None]).sum()
+    )
+    same = (plan[:, :, 0] == plan[:, :, 1]) & (plan[:, :, 0] > 0)
+    cross = (plan[:, :-1, :] == plan[:, 1:, :]) & (plan[:, :-1, :] > 0)
+    cross2 = (plan[:, :-1, 1] == plan[:, 1:, 0]) & (plan[:, :-1, 1] > 0)
+    pen += P_ROTA * (same.sum() + cross.sum() + cross2.sum())
+
+    # 豆类覆盖
+    bean = np.isin(plan, BEAN_SET).reshape(L, -1)
+    cs = np.pad(bean.cumsum(1), ((0, 0), (6, 0)), "constant")
+    pen += P_BEAN * ((cs[:, 6:] - cs[:, :-6] == 0).sum())
+
+    # 同一季同作物过多地块
+    for yi in range(Y):
+        for si in range(S):
+            if (
+                np.bincount(plan[:, yi, si], minlength=C + 1)[MAX_PLOTS + 1 :]
+            ).sum():
+                pen += P_SCAT
+    return (profit - pen,)
+
+
+tb.register("evaluate", fitness, ARGS.case)
+tb.register("mate", tools.cxTwoPoint)
+tb.register("mutate", tools.mutUniformInt, low=0, up=C, indpb=0.03)
+tb.register("select", tools.selTournament, tournsize=3)
+
+# ------------ 合并单元格值 ------------
+
+
+def _val(ws, r, c):
+    v = ws.cell(r, c).value
+    if v is not None:
+        return v
+    for rg in ws.merged_cells.ranges:
+        mc, mr, xc, xr = range_boundaries(str(rg))
+        if mr <= r <= xr and mc <= c <= xc:
+            return ws.cell(mr, mc).value
+    return None
+
+
+# ------------ 季起始行 ------------
+
+
+def _season_bases(ws):
+    r_first = r_second = None
+    for r in range(1, ws.max_row + 1):
+        tag = _val(ws, r, 1) or _val(ws, r, 2)
+        tag = "".join(str(tag).split()) if tag else ""
+        if tag == "第一季" and r_first is None:
+            r_first = r  # 不再 +1
+        if tag == "第二季" and r_second is None:
+            r_second = r
+        if r_first and r_second:
+            break
+    # 默认位置（模板）：2, 56
+    return r_first or 2, r_second or 56
+
+
+def _row_maps(ws):
+    """返回: (第一季映射, 第二季映射)  地块名 → 行号"""
+    r1, r2 = _season_bases(ws)
+    first = {
+        ws.cell(r, 2).value: r
+        for r in range(r1, r2)
+        if ws.cell(r, 2).value
+    }
+    second = {
+        ws.cell(r, 2).value: r
+        for r in range(r2, ws.max_row + 1)
+        if ws.cell(r, 2).value
+    }
+    return first, second
+
+
+# ------------ 写文件 ------------
+
+
+def dump(ind, tpl_path: pathlib.Path, case: str):
+    plan = decode(ind)
+    wb = load_workbook(tpl_path)
+
+    for sh in wb.sheetnames:  # 2024~2030
+        ws = wb[sh]
+        yidx = YEARS.index(int(sh))
+
+        # 表头列名 → 列号
+        col_idx = {
+            ws.cell(1, c).value.strip(): c
+            for c in range(1, ws.max_column + 1)
+            if isinstance(ws.cell(1, c).value, str)
+            and ws.cell(1, c).value.strip() in CROP
+        }
+
+        rmap1, rmap2 = _row_maps(ws)
+
+        # 清空旧值
+        for row in (*rmap1.values(), *rmap2.values()):
+            for col in col_idx.values():
+                ws.cell(row, col).value = None
+
+        # 写入新方案
+        for li, land in enumerate(LAND):
+            # 第一季
+            ci1 = plan[li, yidx, 0]
+            if ci1 and land in rmap1:
+                col = col_idx.get(CROP[ci1 - 1])
+                if col:
+                    ws.cell(rmap1[land], col, round(area_half[li], 2))
+
+            # 第二季（可能不存在对应行，如平旱地等）
+            ci2 = plan[li, yidx, 1]
+            if ci2 and land in rmap2:
+                col = col_idx.get(CROP[ci2 - 1])
+                if col:
+                    ws.cell(rmap2[land], col, round(area_half[li], 2))
+
+    wb.save(tpl_path)
+    print(f"✔ 已写入 {tpl_path.name}")
+
+
+# ------------ 进化 ------------
+
+
+def evolve(case: str):
+    pop = tb.population(ARGS.pop)
+    hof = tools.HallOfFame(1)
+    stats = tools.Statistics(lambda i: i.fitness.values[0])
+    stats.register("avg", np.mean)
+    stats.register("max", np.max)
+
+    with ProcessPoolExecutor() as pool:
+        for g in range(1, ARGS.gen + 1):
+            off = list(map(tb.clone, tb.select(pop, len(pop))))
+            for i in range(0, len(off) - 1, 2):
+                if random.random() < 0.8:
+                    tb.mate(off[i], off[i + 1])
+                tb.mutate(off[i])
+                tb.mutate(off[i + 1])
+                del off[i].fitness.values, off[i + 1].fitness.values
+            invalid = [i for i in off if not i.fitness.valid]
+            fits = pool.map(tb.evaluate, invalid, chunksize=32)
+            for ind, f in zip(invalid, fits):
+                ind.fitness.values = f
+            pop = tools.selBest(pop + off, ARGS.pop)
+            hof.update(pop)
+            if g % 20 == 0 or g == ARGS.gen:
+                rec = stats.compile(pop)
+                print(
+                    f"{case:<8} Gen {g:3d}/{ARGS.gen}"
+                    f"  max={rec['max']:>14,.1f}  avg={rec['avg']:>14,.1f}"
+                )
+    return hof[0]
+
+
+# ------------ main ------------
+# （其余代码保持不变……）
+
+# ------------ main ------------
+if __name__ == "__main__":
+    # ——— 情景 1：超产作废 ———
+    if ARGS.case in ("waste", "both"):
+        best_ind = evolve("waste")          # GA 进化
+        dump(best_ind, F_R11, "waste")      # 写模板
+        # ★★ 计算并输出总利润 ★★
+        profit = pure_profit(decode(best_ind), "waste")
+        print(f"[waste] 选中方案总利润：{profit:,.2f} 元")
+
+    # ——— 情景 2：超产五折甩卖 ———
+    if ARGS.case in ("discount", "both"):
+        tb.unregister("evaluate")           # 切换评估函数
+        tb.register("evaluate", fitness, "discount")
+
+        best_ind = evolve("discount")
+        dump(best_ind, F_R12, "discount")
+        profit = pure_profit(decode(best_ind), "discount")
+        print(f"[discount] 选中方案总利润：{profit:,.2f} 元")
+
+
+\end{lstlisting}

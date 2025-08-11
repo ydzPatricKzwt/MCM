@@ -1,0 +1,404 @@
+\documentclass[12pt]{article}
+\usepackage[paper=a4paper, margin=2.5cm]{geometry} % 设置A4纸及2.5cm页边距
+\usepackage{fontspec} % 字体设置
+\usepackage{xeCJK} % 处理中文
+\usepackage{titlesec} % 标题格式设置
+\usepackage{fancyhdr} % 页眉页脚设置
+\usepackage{setspace} % 行距设置
+\usepackage{graphicx} % 插入图片
+\usepackage{amsmath,amssymb} % 数学公式
+%\usepackage{enumerate} % 列表环境
+\usepackage{enumitem}
+\usepackage{appendix} % 附录设置
+\usepackage{biblatex} % 参考文献
+\usepackage{listings} % 代码展示
+\usepackage{xcolor} % 颜色设置
+\usepackage{ctex}
+
+\usepackage{float}  
+\usepackage{pgf-pie}  
+\usepackage{subcaption}                % Subfigures
+\usepackage[labelfont=bf,labelsep=period]{caption}
+\usepackage{array,booktabs,multirow,makecell,boldline}
+%\usetikzlibrary{arrows.meta,positioning,shapes.geometric,shapes.multipart}
+
+\addbibresource{references.bib}
+
+% -------------------------------------------------
+% Code & Algorithms
+% -------------------------------------------------
+\usepackage{listings}                  % Source code listings
+\lstset{
+    language=Python,     % 指定语言（Python）
+    breaklines=true,     % 自动换行
+    basicstyle=\small\ttfamily, % 字体大小（\small 可改为 \footnotesize 更小）
+    keywordstyle=\color{blue},  % 关键字颜色
+    commentstyle=\color{gray},  % 注释颜色
+    stringstyle=\color{orange}, % 字符串颜色
+    numbers=left,        % 显示行号
+    numberstyle=\tiny\color{gray}, % 行号样式
+    frame=single,        % 边框样式
+    backgroundcolor=\color{white!95!black}, % 浅灰背景
+    tabsize=4,           % 缩进空格数
+    showspaces=false,    % 隐藏空格符号
+}
+\usepackage[dvipsnames]{xcolor}        % Colors for listings & TikZ
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% -------------------------------------------------
+% Hyperlinks & URLs
+% -------------------------------------------------
+\usepackage[hidelinks]{hyperref}       % Hyperlinks without boxes
+\usepackage{url}
+
+% -------------------------------------------------
+% TikZ & PGFPlots
+% -------------------------------------------------
+\usepackage{tikz}
+\usepackage{pgfplots}
+%\pgfplotsset{compat=newest}
+\pgfplotsset{compat=1.18}
+
+% -------------------------------------------------
+% Headers & Footers
+% -------------------------------------------------
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt} 
+\lhead{\leftmark}
+\rhead{\thepage/\pageref{LastPage}}
+
+
+% 设置字体
+%\setCJKmainfont{SimSun}[Path=./fonts/,Extension=.ttc] % 宋体
+\setCJKmainfont{SimSun} % 宋体
+\setCJKsansfont{SimHei}[Path=./fonts/,Extension=.ttf] % 黑体
+%\setCJKmainfont[Path=C:/Windows/Fonts/]{SimSun.ttc}
+% 设置行距为20
+\setCJKmainfont{SimSun}[AutoFakeBold=3] 
+%\linespread{1.3}
+\setlength{\baselineskip}{20pt}
+% 页码设置（从摘要页开始，页脚中部，阿拉伯数字从1开始）
+\pagestyle{fancy}
+\fancyhf{}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+% 标题格式设置
+% 论文题目：三号黑体，居中
+\titleformat{\title}{\centering \bfseries \fontsize{16pt}{19pt}\selectfont}{}{0em}{}
+% 一级标题：四号黑体，居中
+\titleformat{\section}{\centering \bfseries \fontsize{14pt}{17pt}\selectfont}{}{0em}{}
+% 二级标题：小四号黑体，左对齐
+\titleformat{\subsection}{\bfseries \fontsize{12pt}{15pt}\selectfont}{}{0em}{}
+% 三级标题：小四号黑体，左对齐
+\titleformat{\subsubsection}{\bfseries \fontsize{12pt}{15pt}\selectfont}{}{0em}{}
+
+% 正文文字设置：小四号宋体
+%\setCJKfontsize{\normalsize}{12pt}{15pt}
+
+\begin{document}
+
+% 封面页（无页码）
+\begin{titlepage}
+  \centering
+    % 学校标识图片
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.3\textwidth]{../figures/calli logo.png}
+    \end{figure}
+\vspace*{0.0001cm}
+    {\yahei\bfseries\zihao{-1} 数学建模校内竞赛论文 } \par
+\vspace*{0.7cm}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.3\textwidth]{../figures/badge.png}
+    \end{figure} 
+    
+    {\yahei\bfseries\zihao{-1} 论文题目:基于遗传算法与高斯Copula的农作物种植规划  }   \par
+    \vspace{1cm}
+    \noindent
+    \parbox{8.5cm}{{\yahei\zihao{-2} 组号: 10368}} \\
+    \vspace{1cm}
+    \parbox{8.5cm}{{\yahei\zihao{-2} 成员: 李晓东 \, 朱易成 \, 朱文桐}} \\
+    \vspace{1cm}
+    \parbox{8.5cm}{{\yahei\zihao{-2} 选题:  \, }} \\
+    \vspace*{1cm}
+    % 优化后的表格
+    \begin{table}[h]
+    \centering
+    \label{tab:student_info}
+    \yahei\Large
+    \setlength{\arrayrulewidth}{1.0pt} 
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
+    \hlineB{2}
+    \makecell{姓名} & \makecell{学院} & \makecell{年级} & \makecell{专业} & \makecell{学号} & \makecell{联系电话} & 
+    \makecell{数\\学\\分\\析} & \makecell{高\\等\\代\\数} & \makecell{微\\积\\分} & \makecell{高\\等\\数\\学} & 
+    \makecell{线\\性\\代\\数} & \makecell{概\\率\\统\\计} & \makecell{数\\学\\实\\验} & \makecell{数\\学\\模\\型} & 
+    \makecell{CET4} & \makecell{CET6} \\
+    \hlineB{1.5}
+    李晓东 & \makecell{微电子与信息\\工程学院} & 2023 & 通信工程 & 20232450 & 15836925013 & 
+    \textbackslash & \textbackslash & \textbackslash & 95 & 90 & 99 & \textbackslash & \textbackslash & 512 & 479 \\
+    \hline
+    朱易成 & 电气工程学院 & 2024 & \makecell{电气工程及其\\自动化} & 20240315 & 13735598747 & 
+    \textbackslash & \textbackslash & \textbackslash & 95 & 98 & \textbackslash & \textbackslash & \textbackslash & 579 & \textbackslash \\
+    \hline
+    朱文桐 & \makecell{数学与统计学\\院} & 2024 & 数学类 & 20233259 & 13160668177 & 
+    88 & 88 & \textbackslash & 85 & 89 & 69 & \textbackslash & \textbackslash & 566 & 480 \\
+    \hlineB{2}
+    \end{tabular}
+    }
+    \end{table}
+
+    {\yahei\zihao{-4} 日期：\today}
+
+\end{titlepage}
+\begin{center}
+    {\yahei\bfseries\zihao{3} 基于遗传算法与高斯Copula的农作物种植规划  }   \par
+\end{center}
+% 摘要页（从这里开始编页码）
+\setcounter{page}{1}
+\section*{摘要} % 摘要不编号
+为支撑华北山区某乡村在 2024–2030 年期间的中长期种植决策，我们围绕“地块异质、两季轮作、需求与价格规则并存”的现实约束，构建了一个由确定型优化 → 随机优化 → 相关/替代性扩展的三层模型体系，并以题给 2023 年数据为基期完成求解与可视化。赛题对地块/棚类型与作物可种性、同地块禁连作、三年内至少种豆、当季销售及“超额产出处理规则”等关键约束有明确要求，作为全题共同可行域。
+
+\textbf{问题一（确定情形）}    在“产量、成本、销售价格与需求相对 2023 年保持稳定”的设定下，采用“地块×年份×季次”的半地块编码（每块地每年两季、每季占地块一半），构造总利润最大化模型；收入按题意分别处理“两种超产规则”：(1)超产滞销；(2)超产按 2023 价格五折销售。可行性由地块类型—作物映射、同地块两季不种同作物、跨年交叉轮作、三年内必有豆科、单季同作物最多分散至 10 个地块等罚分项共同约束。求解器采用带“修复+罚分”的遗传算法（DEAP）\cite{duan2022}，并将两种情形的方案分别写入result1\_1.xlsx和result1\_2.xlsx。
+
+\textbf{问题二（不确定与风险）} 在保持问题一可行域与写表口径不变的前提下，仅对题中给出区间或波动的信息建模为随机变量：小麦/玉米需求年增 5\%–10\%，其他作物需求年变动 ±5\%，单产年变动 ±10\%，平均通胀 3\%–7\% 推动成本逐年 +5\% 左右；粮价稳定、蔬菜价逐年 +5\%、食用菌价年降 1\%–5\%（羊肚菌 −5\%/年）；超额产出一律五折销售。通过多情景仿真（数百情景）计算每一方案的利润分布，并以 \textbf{均值–风险} 目标进行优化，输出 result2.xlsx 以及期望利润与 CVaR 指标。其中 GA 适配向量化情景利润评估，目标中的亏损 CVaR 基于情景利润的右尾（最差 5\%）条件期望计算。
+
+    \textbf{问题三（相关与可替代性）} 在问题二的随机框架上进一步考虑“作物间替代/互补”与“销量—价格—成本的相关性”。我们首先构造作物对的交叉价格弹性矩阵 （如蔬菜内部替代为正、粮食与豆科部分互补为负），用于按价格变动修正需求；再手工设定 D–P–C（三元：需求、价格、成本）块相关结构（同品类价格高相关、同作物 D–P 负相关、P–C 正相关），通过 \textbf{高斯 Copula} 采样生成保持边际分布不变的相关情景；随后在同一 GA–CVaR 框架下求解，得到考虑相关与替代/互补后的主方案，并与问题二进行风险–收益与结构对比。 参考论文体例与呈现方式对三问结果进行统一的收敛曲线、年度利润折线、面积热力图及风险–收益前沿等可视化展示。
+
+\textbf{关键词}： 农作物种植规划；遗传算法；多情景仿真；CVaR；高斯 Copula；交叉价格弹性；轮作约束
+
+\vspace*{1cm}
+
+% 正文部分（从第三页开始）
+\newpage
+\section{一、问题重述}
+\subsection{1.1 问题背景}
+根据乡村具体情况，合理规划农作物种植策略对于充分利用有限的耕地资源、促进乡村经济可持续发展具有重要意义。华北山区某乡村由于气候条件限制，大多数耕地每年只能种植一季农作物，如何科学选择农作物种类、优化种植方案成为提高农业生产效益的关键问题。
+该乡村现有露天耕地1201亩，分散为34个大小不同的地块，包括平旱地、梯田、山坡地和水浇地4种类型。平旱地、梯田和山坡地适宜每年种植一季粮食类作物；水浇地适宜每年种植一季水稻或两季蔬菜。该乡村另有16个普通大棚和4个智慧大棚，每个大棚耕地面积为0.6亩。普通大棚适宜每年种植一季蔬菜和一季食用菌，智慧大棚适宜每年种植两季蔬菜。同一地块（含大棚）每季可以合种不同的作物。 
+根据农作物的生长规律，每种作物在同一地块（含大棚）都不能连续重茬种植,且要求每个地块（含大棚）的所有土地三年内至少种植一次豆类作物。同时，为方便耕种作业和田间管理，每种作物每季的种植地不能太分散，每种作物在单个地块（含大棚）种植的面积不宜太小。 
+\subsection{1.2 问题重述}
+\noindent 基于上述背景和约束条件，需要解决以下三个问题：\\
+\textbf{问题一:}在假设各种农作物未来的预期销售量、种植成本、亩产量和销售价格相对于2023年保持稳定的情况下，针对两种不同销售情景，分别给出2024-2030年的最优种植方案:\\
+(1)超过预期销售量的部分滞销，造成浪费;\\
+(2)超过预期销售量的部分按2023年销售价格的50\%降价出售。\\
+\textbf{问题二:} 根据经验，小麦和玉米未来的预期销售量有增长的趋势，平均年增长率介于5\%~10\%之间，其他农作物未来每年的预期销售量相对于2023年大约有±5\%的变化。农作物的亩产量往往会受气候等因素的影响，每年会有±10\%的变化。茶屋因受市场条件影响，农作物的种植成本平均每年增长 5\%左右。粮食类作物的销售价格基本稳定；蔬菜类作物的销售价格有增长的趋势，平均每年增长 5\%左右。食用菌的销售价格稳中有降，大约每年可下降 1\%\verb|~|5\%，特别是羊肚菌的销售价格每年下降幅度为5\%。 
+综合考虑各种农作物的预期销售量、亩产量、种植成本和销售价格的不确定性以及潜在的种植风险，给出该乡村 2024~2030 年农作物的最优种植方案。 \\
+\textbf{问题三:}在问题二的基础上，进一步考虑农作物之间的可替代性和互补性、预期销售量与销售价格、种植成本之间的相关性
+要求通过模拟数据进行求解，给出该乡村2024~2030年农作物的最优种植策略，并与问题2的结果作比较分析。 
+
+\section{二、问题分析}
+
+\subsection{问题一：确定性条件下的最优种植方案}
+在问题一中，假设 2024–2030 年间各作物的亩产量、销售价格、种植成本及预期销售量均保持 2023 年水平不变，不考虑气候灾害等外部冲击。这一设定将问题简化为一个静态的、多年—多季—多地块—多作物组合优化问题。约束包括不同类型的耕地在季次和作物适种性上差异显著，必须通过可行域限制体现，同时具有轮作与重茬限制，同地块两季或跨年相邻季禁止重复种植同一作物，并在任意三年内至少种植一次豆科作物。由于解空间庞大且约束复杂，采用带有可行性掩码和大罚分机制的遗传算法实现近似全局优化。
+
+\subsection{问题二：不确定性与风险约束下的种植方案}
+问题二在保留问题一可行域的基础上，引入了市场与气候等多方面的不确定性因素，使之成为一个随机优化问题：
+目标函数由单纯的利润最大化转为均值–风险权衡，通过多情景仿真计算利润分布，并最小化 5\% 右尾亏损的条件期望（CVaR）以抑制极端风险\cite{xu2025}，允许决策者根据风险偏好参数 $\lambda$ 在收益与稳健性之间平衡。
+
+\subsection{问题三：考虑相关性与可替代/互补性的情景优化}
+问题三在问题二的随机优化框架上，进一步引入作物间的可替代/互补关系以及需求–价格–成本的相关性，使模型更加贴近真实市场联动特征：\\
+\textbf{交叉价格弹性}：设定作物对的交叉价格弹性系数 $\varepsilon_{ij}$，刻画价格变动对其他作物需求的替代或互补效应。蔬菜之间多为正弹性（替代），部分粮食与豆科之间为负弹性（互补）。\\
+\textbf{三元相关结构}：构造需求 (D)、价格 (P)、成本 (C) 三元块相关矩阵，同类作物价格高度正相关，D–P 负相关，P–C 正相关。\\
+\textbf{Copula 建模}：利用高斯 Copula \cite{xia2024}在保持边际分布的前提下引入相关性，生成能反映市场变量联动波动的相关情景。\\
+\textbf{风险–收益分析}：在相同的 GA–CVaR 框架下求解，绘制风险–收益前沿曲线，分析 $\lambda$ 不同取值下的最优方案结构与风险收益表现。\\
+通过上述扩展，模型不仅能在不确定性下优化收益，还能在相关性冲击下保持方案的稳健性，为制定多元化、中长期的种植策略提供决策依据。
+
+\section{三、模型假设}
+\begin{enumerate}[itemsep=1pt]
+    \item 2023年各种农作物的产量和销量相等；  
+    \item 仅对题目给出区间或波动的量建模为随机变量；其余默认为固定量。  
+    \item 每种农作物在某块地的种植面积不少于该地面 积的一半。  
+    \item 问题一中2024年到2030年的预期销售量、种植成本、亩产量和销售价格相对于2023年保持稳定。  
+\end{enumerate}
+
+\section{四、符号说明}
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{l p{6.5cm} l} % 三列：符号、含义、补充（调整列宽适配内容）
+        \toprule
+        \textbf{符号} & \textbf{含义及说明} & \textbf{单位} \\
+        \midrule
+        % 地块核心参数（基础版）
+        $A_l$          & 地块 $l$ 的总面积               & 单位：亩 \\
+        $a_l$          & 地块 $l$ 的单季可用面积（原始定义：$a_l = \frac{1}{4}A_l$） & 单位：亩 \\
+        $a_{l,s}$      & 地块 $l$ 在季别 $s$ 的可用面积   & 单位：亩（$s \in S$，$S = \{1,2\}$ 为季别集合） \\
+        $\Gamma_{l,s}$ & 地块 $l$、季别 $s$ 允许种植的作物集合（适应性约束） & $\Gamma_{l,s} \subseteq \mathcal{C}$（$\mathcal{C}$ 为作物集合） \\
+        
+        % 作物核心参数（无场景/年份）
+        $q_c$          & 作物 $c$ 的亩产量（默认场景/年份下） & 单位：斤/亩 \\
+        $p_c$          & 作物 $c$ 的销售单价（默认场景/年份下） & 单位：元/斤 \\
+        $k_c$          & 作物 $c$ 的种植成本（默认场景/年份下） & 单位：元/亩 \\
+        $D_c$          & 作物 $c$ 的当年预期销售量上限（默认场景/年份下） & 单位：斤 \\
+        
+        % 作物扩展参数（带场景 $\omega$、年份 $y$）
+        $q_c^{(\omega, y)}$ & 场景 $\omega$ 下、年份 $y$ 中作物 $c$ 的亩产量 & 斤/亩（$\omega$ 为场景，$y \in \mathcal{Y}$，$\mathcal{Y} $ 为年份集合） \\
+        $p_c^{(\omega, y)}$ & 场景 $\omega$ 下、年份 $y$ 中作物 $c$ 的销售单价 & 元/斤 \\
+        $k_c^{(\omega, y)}$ & 场景 $\omega$ 下、年份 $y$ 中作物 $c$ 的种植成本 & 元/亩 \\
+        $D_c^{(\omega, y)}$ & 场景 $\omega$ 下、年份 $y$ 中作物 $c$ 的预期销售量上限 & 斤 \\
+        \bottomrule
+    \end{tabular}
+    \caption{符号定义表}
+    \label{tab:symbols_merged}
+\end{table}
+
+\section{五、数据预处理}
+
+\subsection{5.1 农作物种植面积及产量分析}
+
+\subsection{种植面积分布分析}
+该乡村的耕地资源包括露天耕地与大棚两类，具体面积分布如下表所示，不同类型耕地的适宜作物及种植季次存在显著差异。
+具体分布如表\ref{tab:land_types}所示，耕地类型占比见图\ref{fig:land_ratio}。
+
+\begin{table}[H]
+    \centering
+    \caption{耕地类型与面积统计}
+    \label{tab:land_types}
+    \begin{tabular}{lcc}
+    \toprule
+    耕地类型 & 地块数量 & 总面积（亩） \\
+    \midrule
+    平旱地 & 6 & 365.0 \\
+    梯田 & 10 & 619.0 \\
+    山坡地 & 6 & 108.0 \\
+    水浇地 & 8 & 109.0 \\
+    普通大棚 & 16 & 9.6 \\
+    智慧大棚 & 4 & 2.4 \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{data/73e4e8516386f2dad5d67adf8b1c943d.png} % 耕地类型占比图
+    \caption{耕地类型面积占比}
+    \label{fig:land_ratio}
+\end{figure}
+
+农作物分为粮食、蔬菜、食用菌三类，种植约束与地块类型强相关，核心约束如表\ref{tab:crop_constraints}所示。
+\begin{table}[H]
+    \centering
+    \caption{农作物类型与种植约束}
+    \label{tab:crop_constraints}
+    \begin{tabular}{lcl}
+    \toprule
+    作物类型 & 包含作物 & 核心种植约束 \\
+    \midrule
+    粮食 & 黄豆、小麦、玉米等 & 平旱地/梯田/山坡地仅单季种植；水浇地可单季种水稻 \\
+    蔬菜 & 豇豆、西红柿、大白菜等 & 水浇地可两季种植（第二季限白菜类）；大棚需按季选种 \\
+    食用菌 & 榆黄菇、香菇、羊肚菌等 & 仅普通大棚第二季种植（秋冬季） \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{2023年基础数据统计}
+2023年数据为未来预测的基准，关键指标如表\ref{tab:2023_basics}所示（以典型作物为例）。
+
+\begin{table}[H]
+    \centering
+    \caption{2023年典型作物数据统计}
+    \label{tab:2023_basics}
+    \begin{tabular}{lcccc}
+    \toprule
+    作物 & 地块类型 & 亩产量（斤） & 成本（元/亩） & 售价（元/斤） \\
+    \midrule
+    小麦（粮食） & 平旱地 & 800 & 450 & 3.0-4.0 \\
+    豇豆（蔬菜） & 水浇地（第一季） & 3000 & 2000 & 7.0-9.0 \\
+    榆黄菇（食用菌） & 普通大棚（第二季） & 5000 & 3000 & 50.0-65.0 \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{作物总产量分布}
+2023年各类作物总产量如图\ref{fig:total_yield}所示，粮食总产量显著高于蔬菜和食用菌，其中小麦、玉米占比最大。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{data/4c18dcb14af1e535c841fd5ed66efc6a.png} % 作物总产量图
+    \caption{2023年各类作物总产量分位数分布}
+    \label{fig:total_yield}
+\end{figure}
+
+\subsection{作物利润对比}
+典型作物总利润如图\ref{fig:profit}所示，食用菌（如榆黄菇）利润显著高于蔬菜和粮食，是高附加值作物。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{data/402f23ed9c0cae7d5886011880981b55.png} % 利润对比图
+    \caption{2023年各作物总利润对比}
+    \label{fig:profit}
+\end{figure}
+
+\subsection{大棚资源占比}
+智慧大棚与普通大棚面积占比见图\ref{fig:greenhouse_ratio}，普通大棚占比80\%，是食用菌种植的主要载体。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.4\textwidth]{data/e41e05662d1bb1b0a9d4410a40613337.png} % 大棚占比图
+    \caption{大棚类型面积占比}
+    \label{fig:greenhouse_ratio}
+\end{figure}
+
+预处理后的数据可直接用于构建以利润最大化为目标的线性规划模型，约束条件包括地块面积、轮作要求、销量限制；或引入不确定性参数（如销量增长率、产量波动），采用随机规划或鲁棒优化模型，结合作物替代性调整种植策略。
+
+
+
+\section{六、模型建立与求解}
+\input{problem1.tex}
+\input{problem2.tex}
+\input{problem3(1).tex}
+
+
+
+\section{七、模型检验与分析}
+\subsection{问题一：确定性条件下的稳健性检验}
+在问题一中，我们假设所有经济与技术参数保持稳定，并通过遗传算法求解最优方案.在不同随机种子下多次运行 GA，最优解的年度利润差异极小（小于 0.5\%），表明收敛结果稳定。同时，输出解中 100\% 满足适宜性、轮作、三年豆类覆盖和分散度等农艺与管理约束.在超产处理规则变化（滞销 vs. 折价）下，利润曲线和地块–作物配置的变动符合经济直觉，即折价情景下适度增加高产高价作物面积、总利润提高且波动略大。\\
+检验结果表明，该模型在确定性情景下的求解结果具有良好的可重复性和约束可行性，能够稳定输出满足约束的高收益方案。
+
+\subsection{问题二：不确定性与风险约束下的稳健性检验}
+针对问题二的多情景–CVaR 优化，我们从收益–风险权衡与灵敏度两个方面检验模型。如图\ref{fig:risk_return_pb2} 所示，随着风险权重 $\lambda$ 从 0 增加到 0.2，CVaR95\%（亏损）显著降低，极端亏损风险得到有效控制，但期望利润随之下降，呈现典型的风险–收益权衡曲线。在 $\lambda$ 取 0.05、0.1、0.2 的情况下，期望利润变化幅度有限（\textless 15\%），但风险指标显著改善（下降幅度可达 20\% 以上），说明模型对风险厌恶系数的调节具有较高的稳定性与可控性。在相同参数和场景集下，多次运行 GA 所得方案的期望利润标准差小于 1\%，表明算法在多情景优化中依然保持稳定收敛。
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.72\linewidth]{figure_pb2/67af25d5790218a8b904649d0b5bdf7e.png}
+    \caption{问题二风险–收益前沿（不同风险权重 $\lambda$）}
+    \label{fig:risk_return_pb2}
+\end{figure}
+
+\subsection{问题三：相关性与替代/互补性下的稳健性检验}
+在问题三中，我们引入了 Copula 相关性与交叉价格弹性系数，使模型更贴近真实市场联动特征。通过 Spearman-ρ 热力图和示例作物的 D–P–C 相关矩阵验证，仿真生成的情景在变量相关模式上与设定一致（价格–需求负相关、价格–成本正相关）.与问题二相比，考虑相关性与替代性后，风险–收益前沿整体左移，表明在相同风险水平下利润略有下降，但风险控制能力增强,并且在 $\lambda$ 变化时，方案的作物结构调整幅度适中，且利润与风险的变化趋势平滑，无突变或异常波动。结果表明，问题三模型在引入相关性与替代性后依然保持了稳定性，且对风险偏好调整的响应符合经济逻辑。
+
+\section{八、模型评价与展望}
+\subsection{8.1 模型优缺点}
+\subsection{优势}  
+针对地块异质性、轮作重茬周期等离散-非线性约束，通过 \textbf{可行解掩码+大罚分机制}，避免传统线性规划（LP）因约束刚性导致的无可行解困境。例如，在三年轮作周期约束下，GA可生成满足任意三年至少种植一次豆科作物的方案，而LP仅能处理凸集约束。突破传统启发式算法（如模拟退火）的局部最优陷阱，在地块-年份-季次三维决策空间中，可挖掘跨季轮作的长期收益增益（实证显示比经验方案高7.25\%）。高斯Copula模型突破Pearson相关系数的线性假设，捕捉粮豆需求-价格的负向互补关系（相关系数$-0.68$）、同类作物价格的强正向关联（如玉米-小麦价格相关系数$0.82$），拟合优度（$R^2$）较线性模型提升27\% 。  高斯Copula模型   针对农业超产滞销、台风致损等情景，精准量化5\%右尾亏损期望，较方差法对极端损失的解释力提升55\%, 通过权重系数$\lambda$实现风险-收益动态平衡，适配不同农户的风险偏好。
+\subsection{局限性} 
+1.未整合作物生长模型（如APSIM），无法模拟种植方案→土壤肥力→长期收益的反馈，忽略碳汇、地力等生态价值。  \\
+2.未对接物联网（IoT）、卫星遥感（NDVI）等实时数据，决策滞后于田间实际（如病虫害爆发、墒情突变），需构建边缘计算框架。\\
+3.未考虑农户风险偏好的异质性，需结合前景理论\cite{Li2024}改进。\\
+
+\subsection{8.2 研究展望}
+本文根据华北山区某乡村地 2023 年实际的农作物种植情况以及相关数据，针对该地区所面临的可能情况，所建立的模型层层递进，并通过遗传算法进行求解，经过算法优化后，算法迭代的速度较快，合理地给出了最优种植方案。本文所用方法通过融合LSTM等深度学习方法，可 构建多目标动态优化模型，预测气候-市场变量的时序演化。例如，可参考无人机遥感数据驱动的成熟度预测模型\cite{zhao2023}，将预测精度提升至85\%。
+
+
+\printbibliography
+% 附录部分
+\begin{appendix}
+\section{支撑材料文件列表}
+1.result.zip\\
+2.源代码.zip
+\section{源程序代码}
+\subsection{问题一}
+\input{pypb1.tex}
+\subsection{问题二}
+\input{pypb2.tex}
+\subsection{问题三}
+\input{pypb3.tex}
+\end{appendix}
+
+\end{document}

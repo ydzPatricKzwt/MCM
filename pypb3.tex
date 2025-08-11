@@ -1,0 +1,237 @@
+\begin{lstlisting}[language=Python, keywordstyle=\color{blue!70}, commentstyle=\color{red!50!green!50!blue!50}, frame=shadowbox, rulesepcolor=\color{red!20!green!20!blue!20}]
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+p3_ga_copula.py  –  C 题·问题 3
+  · 手工 Σ + 高斯 Copula 生成相关情景
+  · 交叉弹性 ε_ij 修正需求（替代 / 互补）
+  · GA + CVaR95% 求解
+"""
+
+import argparse, pathlib, random, re, warnings
+import numpy as np, pandas as pd
+from scipy.stats import norm
+from deap import base, creator, tools
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# ── CLI ────────────────────────────────────────────────
+cli = argparse.ArgumentParser()
+cli.add_argument("--pop", type=int, default=120)
+cli.add_argument("--gen", type=int, default=300)
+cli.add_argument("--scen", type=int, default=400)
+cli.add_argument("--lam",  type=float, default=0.10)
+cli.add_argument("--seed", type=int, default=42)
+ARGS = cli.parse_args()
+random.seed(ARGS.seed); np.random.seed(ARGS.seed)
+
+ROOT = pathlib.Path(__file__).resolve().parent
+F_LAND, F_STATS = ROOT/"附件1.xlsx", ROOT/"附件2.xlsx"
+
+# ── 数据读取 & 清洗  (同问题2) ───────────────────────────
+land_df = pd.read_excel(F_LAND, "乡村的现有耕地")
+crop_df = pd.read_excel(F_LAND, "乡村种植的农作物")
+crop_df = crop_df[crop_df["作物编号"].notna()].copy()
+crop_df["作物名称"] = crop_df["作物名称"].astype(str).str.strip()
+
+LAND, CROP = land_df["地块名称"].tolist(), crop_df["作物名称"].tolist()
+L, C = len(LAND), len(CROP)
+
+land_type = land_df.set_index("地块名称")["地块类型"].to_dict()
+area_half = np.array([0.5*land_df.set_index("地块名称")["地块面积/亩"][l] for l in LAND])
+
+crop_type = (crop_df.set_index("作物名称")["作物类型"]
+             .fillna("").astype(str).str.strip().to_dict())
+
+stats23  = pd.read_excel(F_STATS, "2023年统计的相关数据")
+area23   = pd.read_excel(F_STATS, "2023年的农作物种植情况")
+
+def _avg(x):
+    nums=re.findall(r"[\d.]+", str(x)); return sum(map(float,nums))/len(nums) if nums else np.nan
+stats23["均价"] = stats23["销售单价/(元/斤)"].apply(_avg)
+agg = stats23.groupby("作物名称").agg(yld=("亩产量/斤","mean"),
+                                      cost=("种植成本/(元/亩)","mean"),
+                                      price=("均价","mean"))
+yield_c = {k:0 if pd.isna(v) else v for k,v in agg["yld"].items()}
+cost_c  = {k:0 if pd.isna(v) else v for k,v in agg["cost"].items()}
+price_c = {k:0 if pd.isna(v) else v for k,v in agg["price"].items()}
+
+prod23 = (area23.merge(stats23[["作物名称","亩产量/斤"]], on="作物名称")
+          .assign(prod=lambda d:d["种植面积/亩"]*d["亩产量/斤"]))
+demand_23 = prod23.groupby("作物名称")["prod"].sum().to_dict()
+
+# ── 分类索引 & 掩码 (★ 此处提前定义 veg_mask / fungi_mask) ──
+idx_morel = CROP.index("羊肚菌") if "羊肚菌" in CROP else None
+veg_mask   = np.array([crop_type[c].startswith("蔬菜")  for c in CROP])
+grain_mask = np.array([crop_type[c].startswith("粮食")  for c in CROP])
+fungi_mask = np.array([crop_type[c] == "食用菌"        for c in CROP])
+
+# ── 替代 / 互补交叉弹性 eps_ij  ----------------------------
+eps = np.zeros((C, C))
+for i in range(C):
+    for j in range(C):
+        if i==j: continue
+        if veg_mask[i] and veg_mask[j]: eps[i,j] = 0.2     # 蔬菜替代
+        if grain_mask[i] and crop_type[CROP[j]].startswith("豆"):
+            eps[i,j] = -0.15                                # 粮食-豆互补
+
+# ── 手工相关矩阵 Σ (3C×3C) & nearest-PD -------------------
+def build_sigma():
+    dim = 3*C; Σ = np.eye(dim)
+    def idx(v,i): return 3*i+v    # v:0=D 1=P 2=C
+    # 自变量相关设置
+    for i in range(C):
+        Σ[idx(0,i),idx(1,i)] = Σ[idx(1,i),idx(0,i)] = -0.4 if veg_mask[i] else -0.2
+        Σ[idx(1,i),idx(2,i)] = Σ[idx(2,i),idx(1,i)] = 0.6
+    for i in range(C):
+        for j in range(i+1,C):
+            Σ[idx(1,i),idx(1,j)] = Σ[idx(1,j),idx(1,i)] = 0.7 if crop_type[CROP[i]]==crop_type[CROP[j]] else 0.3
+            Σ[idx(2,i),idx(2,j)] = Σ[idx(2,j),idx(2,i)] = 0.8
+            Σ[idx(0,i),idx(1,j)] = Σ[idx(1,j),idx(0,i)] = eps[i,j]
+
+    # nearest positive-definite
+    def nearest_pd(A):
+        B=(A+A.T)/2
+        _,s,V=np.linalg.svd(B); H=V.T@np.diag(s)@V
+        A2=(B+H)/2; A3=(A2+A2.T)/2
+        if np.all(np.linalg.eigvals(A3)>0): return A3
+        I=np.eye(A.shape[0]); k=1
+        while True:
+            try_mat=A3+I*np.spacing(np.linalg.norm(A))*k
+            if np.all(np.linalg.eigvals(try_mat)>0): return try_mat
+            k+=1
+    return nearest_pd(Σ)
+
+Σ = build_sigma()
+
+# ── 场景采样 (高斯 Copula)  -------------------------------
+YEARS = list(range(2024,2031)); Y=len(YEARS)
+def gen_scenarios(N):
+    dim=3*C; L_chol=np.linalg.cholesky(Σ)
+    demand=np.zeros((N,C,Y)); price=np.zeros_like(demand)
+    cost=np.zeros_like(demand); yld=np.zeros_like(demand)
+
+    σ_D     = 0.05/1.96
+    σ_P_veg = 0.05/1.96; σ_P_fungi = 0.03/1.96; σ_P_other = 0.02/1.96
+    σ_C     = 0.05/1.96
+
+    for k in range(N):
+        z=np.random.randn(dim)
+        u=norm.cdf(L_chol@z)
+        for i in range(C):
+            # 对数正态反变换
+            μd=np.log(demand_23.get(CROP[i],1e-6)); μp=np.log(price_c.get(CROP[i],1)); μc=np.log(cost_c.get(CROP[i],1))
+            d=np.exp(μd + σ_D*norm.ppf(u[3*i]))
+            if fungi_mask[i]: σp=σ_P_fungi
+            elif veg_mask[i]: σp=σ_P_veg
+            else: σp=σ_P_other
+            p=np.exp(μp + σp*norm.ppf(u[3*i+1]))
+            c=np.exp(μc + σ_C*norm.ppf(u[3*i+2]))
+            demand[k,i,:]=d; price[k,i,:]=p; cost[k,i,:]=c
+            yld[k,i,:]=yield_c.get(CROP[i],0)*(1+np.random.uniform(-0.1,0.1,Y))
+
+        # 交叉弹性调整需求
+        for i in range(C):
+            pct_sum=(price[k,:,0]-np.array([price_c.get(c,1) for c in CROP]))/np.array([price_c.get(c,1) for c in CROP])
+            adj=(eps[i]*pct_sum).sum()
+            demand[k,i,:]*=(1+adj)
+    return demand.astype(np.float32),yld.astype(np.float32),cost.astype(np.float32),price.astype(np.float32)
+
+print("⏳ Generating correlated scenarios ...")
+D,YLD,COST,PRICE = gen_scenarios(ARGS.scen)
+
+# ── GA / 罚分 / profit 同问题2 (省略重复注释) --------------
+creator.create("Fitness", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.Fitness)
+tb=base.Toolbox(); tb.register("gene", lambda: random.randint(0,C))
+GENE=L*Y*2
+tb.register("individual", lambda: creator.Individual([tb.gene() for _ in range(GENE)]))
+tb.register("population", tools.initRepeat, list, tb.individual)
+
+compat=np.zeros((L,C+1,2),bool)
+for li,land in enumerate(LAND):
+    lt=land_type[land]
+    for ci,c in enumerate(CROP,1):
+        ct=crop_type[c]
+        for si in (0,1):
+            ok=False
+            if lt=="普通大棚": ok=(si==0 and ct.startswith("蔬菜")) or (si==1 and ct=="食用菌")
+            elif lt=="智慧大棚": ok=ct.startswith("蔬菜")
+            elif lt=="水浇地": ok=(c=="水稻" and si==0) or ct.startswith("蔬菜")
+            else: ok=si==0 and ct.startswith("粮食")
+            compat[li,ci,si]=ok
+
+def decode(ind):
+    plan=np.frombuffer(np.array(ind,np.int16),np.int16).reshape(L,Y,2)
+    bad=~compat[np.arange(L)[:,None,None],plan,np.arange(2)]
+    plan=plan.copy(); plan[bad]=0
+    return plan
+
+def area_mat(plan):
+    a=np.zeros((C,Y))
+    for li in range(L):
+        for yi in range(Y):
+            for si in (0,1):
+                ci=plan[li,yi,si]
+                if ci: a[ci-1,yi]+=area_half[li]
+    return a
+
+def profit(area):
+    prod=area[None,:,:]*YLD
+    cost_=area[None,:,:]*COST
+    rev=np.minimum(prod,D)*PRICE + np.maximum(0,prod-D)*PRICE*0.5
+    return rev.sum((1,2))-cost_.sum((1,2))
+
+BEAN_SET=np.array([CROP.index(c)+1 for c,t in crop_type.items() if "豆" in t])
+P_AREA=P_ROTA=P_BEAN=1e7; P_SCAT,MAX_PLOTS=1e5,10
+def penalty(plan):
+    pen=0
+    pen+=P_AREA*(((plan>0).sum(2)*area_half[:,None]<area_half[:,None]).sum())
+    same=(plan[:,:,0]==plan[:,:,1])&(plan[:,:,0]>0)
+    cross=(plan[:,:-1,:]==plan[:,1:,:])&(plan[:,:-1,:]>0)
+    cross2=(plan[:,:-1,1]==plan[:,1:,0])&(plan[:,:-1,1]>0)
+    pen+=P_ROTA*(same.sum()+cross.sum()+cross2.sum())
+    bean=np.isin(plan,BEAN_SET).reshape(L,-1)
+    cs=np.pad(bean.cumsum(1),((0,0),(6,0)))
+    pen+=P_BEAN*((cs[:,6:]-cs[:,:-6]==0).sum())
+    for yi in range(Y):
+        for si in (0,1):
+            if (np.bincount(plan[:,yi,si],minlength=C+1)[MAX_PLOTS+1:]).sum():
+                pen+=P_SCAT
+    return pen
+
+TAIL=int(np.ceil(ARGS.scen*(1-0.95)))
+def fit(ind):
+    plan=decode(ind)
+    prof=profit(area_mat(plan))-penalty(plan)
+    mean=prof.mean()
+    losses=np.clip(mu-prof, 0, None)
+    cvar=np.partition(losses,-TAIL)[-TAIL:].mean()
+    return (mean-ARGS.lam*cvar,)
+
+tb.register("evaluate",fit)
+tb.register("mate",tools.cxTwoPoint)
+tb.register("mutate",tools.mutUniformInt,low=0,up=C,indpb=0.03)
+tb.register("select",tools.selTournament,tournsize=3)
+
+pop=tb.population(ARGS.pop); hof=tools.HallOfFame(1)
+for g in range(1,ARGS.gen+1):
+    off=list(map(tb.clone,tb.select(pop,len(pop))))
+    for i in range(0,len(off)-1,2):
+        if random.random()<0.8: tb.mate(off[i],off[i+1])
+        tb.mutate(off[i]); tb.mutate(off[i+1])
+        for ind in off[i],off[i+1]: del ind.fitness.values
+    for ind in [i for i in off if not i.fitness.valid]:
+        ind.fitness.values=tb.evaluate(ind)
+    pop=tools.selBest(pop+off,ARGS.pop); hof.update(pop)
+    if g%20==0 or g==ARGS.gen:
+        print(f"Gen {g:3d}/{ARGS.gen}  best={hof[0].fitness.values[0]/1e6:.2f} M")
+
+best=decode(hof[0]); econ=profit(area_mat(best))
+mean=econ.mean(); cvar=np.partition(np.clip(-econ,0,None),-TAIL)[-TAIL:].mean()
+
+print("\n==== Problem 3 (Correlated) ====")
+print(f"期望利润      : {mean:,.0f} 元")
+print(f"CVaR95%(亏损) : {cvar:,.0f} 元")
+print(f"目标函数值    : {hof[0].fitness.values[0]:,.0f} 元")
+print("================================")
+\end{lstlisting}

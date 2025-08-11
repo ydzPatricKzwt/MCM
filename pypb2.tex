@@ -1,0 +1,315 @@
+\begin{lstlisting}[language=Python, keywordstyle=\color{blue!70}, commentstyle=\color{red!50!green!50!blue!50}, frame=shadowbox, rulesepcolor=\color{red!20!green!20!blue!20}]
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+problem2_final.py  –  高教社杯 C 题 · 问题 2
+  · 随机量: 需求/单产/通胀/部分菌价
+  · 确定量: 成本+5 %/年, 粮价稳, 蔬价+5 %/年, 羊肚菌 -5 %/年
+  · 销售规则: 需求以内原价, 超出部分 50 % 折价
+  · 目标函数: 期望利润 – λ·CVaR95%(亏损)
+  · 求解器: 遗传算法 (单进程, NumPy 向量化)
+  · 结果   : 写入 result2.xlsx, 并打印期望利润 / CVaR95%
+"""
+
+import argparse, pathlib, random, re, math, warnings
+
+import numpy as np
+import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.utils import range_boundaries
+from deap import base, creator, tools
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# ────── CLI ────────────────────────────────────────────────
+cli = argparse.ArgumentParser()
+cli.add_argument("--pop",   type=int,   default=240,  help="GA 种群规模")
+cli.add_argument("--gen",   type=int,   default=450,  help="迭代代数")
+cli.add_argument("--scen",  type=int,   default=300,  help="情景数量 N")
+cli.add_argument("--lam",   type=float, default=0.10, help="CVaR 权重 λ")
+cli.add_argument("--alpha", type=float, default=0.95, help="CVaR 置信度 α")
+cli.add_argument("--seed",  type=int,   default=42,   help="随机种子")
+ARGS = cli.parse_args()
+random.seed(ARGS.seed); np.random.seed(ARGS.seed)
+
+ROOT   = pathlib.Path(__file__).resolve().parent
+F_LAND = ROOT / "附件1.xlsx"
+F_STATS= ROOT / "附件2.xlsx"
+F_OUT  = ROOT / "result2.xlsx"          # 题目模板
+
+# ────── 读取基础数据 ─────────────────────────────────────────
+land_df  = pd.read_excel(F_LAND, "乡村的现有耕地")
+crop_raw = pd.read_excel(F_LAND, "乡村种植的农作物")
+crop_df  = crop_raw[crop_raw["作物编号"].notna()]           # 过滤说明行
+crop_df["作物名称"] = crop_df["作物名称"].astype(str).str.strip()  # 去掉尾随空格
+area23   = pd.read_excel(F_STATS, "2023年的农作物种植情况")
+stats23  = pd.read_excel(F_STATS, "2023年统计的相关数据")
+
+LAND  = land_df["地块名称"].tolist()
+CROP  = crop_df["作物名称"].tolist()
+L, C  = len(LAND), len(CROP)
+
+land_type = land_df.set_index("地块名称")["地块类型"].to_dict()
+land_area = land_df.set_index("地块名称")["地块面积/亩"].to_dict()
+area_half = np.array([0.5*land_area[l] for l in LAND], dtype=np.float32)
+
+crop_type = (
+    crop_df.set_index("作物名称")["作物类型"]
+           .fillna("").astype(str).str.strip().to_dict()
+)
+
+def _mean_price(txt):
+    nums = re.findall(r"[\d.]+", str(txt))
+    return sum(map(float, nums))/len(nums) if nums else np.nan
+
+stats23["均价"] = stats23["销售单价/(元/斤)"].apply(_mean_price)
+agg = stats23.groupby("作物名称").agg(
+    yld  =("亩产量/斤",   "mean"),
+    cost =("种植成本/(元/亩)", "mean"),
+    price=("均价",       "mean"),
+)
+yield_c = {k:0 if pd.isna(v) else v for k,v in agg["yld"].items()}
+cost_c  = {k:0 if pd.isna(v) else v for k,v in agg["cost"].items()}
+price_c = {k:0 if pd.isna(v) else v for k,v in agg["price"].items()}
+
+# 2023 产量 ≈ 基准需求
+prod23 = (
+    area23.merge(stats23[["作物名称", "亩产量/斤"]], on="作物名称")
+          .assign(prod=lambda d: d["种植面积/亩"]*d["亩产量/斤"])
+)
+demand_23 = prod23.groupby("作物名称")["prod"].sum().to_dict()
+
+# 作物类别索引
+idx_wheat = CROP.index("小麦")  if "小麦"  in CROP else None
+idx_corn  = CROP.index("玉米")  if "玉米"  in CROP else None
+idx_morel = CROP.index("羊肚菌") if "羊肚菌" in CROP else None
+
+veg_mask   = np.array([crop_type[c].startswith("蔬菜") for c in CROP])
+grain_mask = np.array([crop_type[c].startswith("粮食") for c in CROP])
+fungi_mask = np.array([crop_type[c]=="食用菌" for c in CROP])
+
+# ────── 生成随机情景 ──────────────────────────────────────────
+YEARS = list(range(2024,2031)); Y=len(YEARS)
+N     = ARGS.scen
+
+def gen_scenarios():
+    demand = np.zeros((N,C,Y), np.float32)
+    yld    = np.zeros((N,C,Y), np.float32)
+    cost   = np.zeros((N,C,Y), np.float32)
+    price  = np.zeros((N,C,Y), np.float32)
+
+    for k in range(N):
+        infl      = np.random.uniform(0.03,0.07,size=Y)      # 通胀
+        infl_acc  = np.cumprod(1+infl)
+        fall      = np.random.uniform(0.01,0.05,size=Y)      # 菌跌
+        fall_acc  = np.cumprod(1-fall)
+
+        for yi in range(Y):
+            # 需求
+            g_wc = np.random.uniform(0.05,0.10)              # 小麦/玉米增速
+            eps  = np.random.uniform(-0.05,0.05)             # 其他 ±5%
+            for ci,crop in enumerate(CROP):
+                base = demand_23.get(crop,0)
+                if ci in (idx_wheat, idx_corn):
+                    demand[k,ci,yi] = base*(1+g_wc)**(yi+1)
+                else:
+                    demand[k,ci,yi] = base*(1+eps)
+
+            # 单产
+            deltaY = np.random.uniform(-0.10,0.10,size=C)
+            yld[k,:,yi] = [yield_c.get(c,0)*(1+deltaY[j])
+                           for j,c in enumerate(CROP)]
+
+            # 成本
+            cost[k,:,yi] = [cost_c.get(c,0)*infl_acc[yi] for c in CROP]
+
+            # 价格
+            for ci,crop in enumerate(CROP):
+                p0 = price_c.get(crop,0)
+                if veg_mask[ci]:
+                    price[k,ci,yi] = p0*1.05**(yi+1)
+                elif grain_mask[ci]:
+                    price[k,ci,yi] = p0
+                elif fungi_mask[ci]:
+                    if ci==idx_morel:
+                        price[k,ci,yi] = p0*0.95**(yi+1)
+                    else:
+                        price[k,ci,yi] = p0*fall_acc[yi]
+                else:
+                    price[k,ci,yi] = p0
+    return demand,yld,cost,price
+
+print("⏳ 生成随机情景 ...")
+DEMAND,YIELD,COST,PRICE = gen_scenarios()
+
+# ────── 决策变量编码 ─────────────────────────────────────────
+GENE = L*Y*2
+creator.create("Fitness", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.Fitness)
+tb = base.Toolbox()
+tb.register("gene", lambda: random.randint(0,C))
+tb.register("individual", lambda: creator.Individual(
+    [tb.gene() for _ in range(GENE)]))
+tb.register("population", tools.initRepeat, list, tb.individual)
+
+# 可行矩阵 compat[L,C+1,2]
+compat = np.zeros((L,C+1,2), bool)
+for li,land in enumerate(LAND):
+    lt = land_type[land]
+    for ci,crop in enumerate(CROP,1):
+        ct = crop_type[crop]
+        for si in (0,1):
+            ok=False
+            if lt=="普通大棚":
+                ok = (si==0 and ct.startswith("蔬菜")) or (si==1 and ct=="食用菌")
+            elif lt=="智慧大棚":
+                ok = ct.startswith("蔬菜")
+            elif lt=="水浇地":
+                ok = (crop=="水稻" and si==0) or ct.startswith("蔬菜")
+            else:
+                ok = si==0 and ct.startswith("粮食")
+            compat[li,ci,si]=ok
+
+def decode(ind):
+    plan = np.frombuffer(np.array(ind,np.int16),np.int16).reshape(L,Y,2)
+    bad  = ~compat[np.arange(L)[:,None,None], plan, np.arange(2)]
+    plan = plan.copy(); plan[bad]=0
+    return plan.astype(np.int16)
+
+# ────── 批量利润计算 (半价清仓)────────────────────────────────
+def plan_area(plan):
+    area = np.zeros((C,Y), np.float32)
+    for li in range(L):
+        for yi in range(Y):
+            for si in (0,1):
+                ci = plan[li,yi,si]
+                if ci: area[ci-1,yi] += area_half[li]
+    return area                    # (C,Y)
+
+def profits_vector(area):
+    prod  = area[None,:,:] * YIELD          # (N,C,Y)
+    cost  = area[None,:,:] * COST
+    rev   = np.minimum(prod, DEMAND) * PRICE \
+          + np.maximum(0,prod-DEMAND) * PRICE * 0.5
+    return rev.sum((1,2)) - cost.sum((1,2)) # (N,)
+
+# ────── 罚分 (保持与问题1一致)────────────────────────────────
+BEAN_SET = np.array([CROP.index(c)+1 for c,t in crop_type.items() if "豆" in t],
+                    dtype=np.int16)
+P_AREA=P_ROTA=P_BEAN=1e7; P_SCAT, MAX_PLOTS = 1e5,10
+
+def penalty(plan):
+    pen=0
+    pen += P_AREA * (((plan>0).sum(2)*area_half[:,None] < area_half[:,None]).sum())
+    same  = (plan[:,:,0]==plan[:,:,1]) & (plan[:,:,0]>0)
+    cross = (plan[:,:-1,:]==plan[:,1:,:]) & (plan[:,:-1,:]>0)
+    cross2= (plan[:,:-1,1]==plan[:,1:,0]) & (plan[:,:-1,1]>0)
+    pen += P_ROTA*(same.sum()+cross.sum()+cross2.sum())
+    bean = np.isin(plan, BEAN_SET).reshape(L,-1)
+    cs   = np.pad(bean.cumsum(1),((0,0),(6,0)))
+    pen += P_BEAN*((cs[:,6:]-cs[:,:-6]==0).sum())
+    for yi in range(Y):
+        for si in (0,1):
+            if (np.bincount(plan[:,yi,si], minlength=C+1)[MAX_PLOTS+1:]).sum():
+                pen+=P_SCAT
+    return pen
+
+# ────── CVaR fitness ─────────────────────────────────────—
+LAM   = ARGS.lam
+ALPHA = ARGS.alpha
+TAIL  = math.ceil(N*(1-ALPHA))
+
+def fitness(ind):
+    plan = decode(ind)
+    area = plan_area(plan)
+    prof = profits_vector(area) - penalty(plan)   # (N,)
+    mean = prof.mean()
+    worst= np.partition(-prof, -TAIL)[-TAIL:]     # 最大的亏损
+    cvar = worst.mean()
+    return (mean - LAM * cvar,)
+
+tb.register("evaluate", fitness)
+tb.register("mate", tools.cxTwoPoint)
+tb.register("mutate", tools.mutUniformInt, low=0, up=C, indpb=0.03)
+tb.register("select", tools.selTournament, tournsize=3)
+
+# ────── Excel 写入工具 (与问题1相同)─────────────────────────
+def _val(ws,r,c):
+    v=ws.cell(r,c).value
+    if v is not None: return v
+    for rg in ws.merged_cells.ranges:
+        mc,mr,xc,xr=range_boundaries(str(rg))
+        if mr<=r<=xr and mc<=c<=xc:
+            return ws.cell(mr,mc).value
+    return None
+
+def _season_base(ws):
+    r1=r2=None
+    for r in range(1,ws.max_row+1):
+        tag=_val(ws,r,1) or _val(ws,r,2) or ''
+        tag=''.join(str(tag).split())
+        if tag=="第一季" and r1 is None: r1=r
+        if tag=="第二季" and r2 is None: r2=r
+        if r1 and r2: break
+    return r1 or 2, r2 or 56
+
+def _row_maps(ws):
+    r1,r2=_season_base(ws)
+    m1={ws.cell(r,2).value:r for r in range(r1,r2) if ws.cell(r,2).value}
+    m2={ws.cell(r,2).value:r for r in range(r2,ws.max_row+1) if ws.cell(r,2).value}
+    return m1,m2
+
+def dump_excel(plan, tpl=F_OUT):
+    wb=load_workbook(tpl)
+    for sh in wb.sheetnames:
+        ws=wb[sh]; yidx=YEARS.index(int(sh))
+        col={ws.cell(1,c).value.strip():c for c in range(1,ws.max_column+1)
+             if isinstance(ws.cell(1,c).value,str) and ws.cell(1,c).value.strip() in CROP}
+        rm1,rm2=_row_maps(ws)
+        for row in (*rm1.values(),*rm2.values()):
+            for c in col.values(): ws.cell(row,c).value=None
+        for li,land in enumerate(LAND):
+            c1=plan[li,yidx,0]; c2=plan[li,yidx,1]
+            if c1 and land in rm1: ws.cell(rm1[land],col[CROP[c1-1]],round(area_half[li],2))
+            if c2 and land in rm2: ws.cell(rm2[land],col[CROP[c2-1]],round(area_half[li],2))
+    wb.save(tpl); print(f"✔ 已写入 {tpl.name}")
+
+# ────── 遗传算法求解 (单进程)────────────────────────────────
+POP = tb.population(ARGS.pop)
+hof = tools.HallOfFame(1)
+for g in range(1, ARGS.gen+1):
+    off = list(map(tb.clone, tb.select(POP, len(POP))))
+    for i in range(0,len(off)-1,2):
+        if random.random()<0.8: tb.mate(off[i],off[i+1])
+        tb.mutate(off[i]); tb.mutate(off[i+1])
+        del off[i].fitness.values, off[i+1].fitness.values
+    invalid=[i for i in off if not i.fitness.valid]
+    for ind in invalid:
+        ind.fitness.values = tb.evaluate(ind)
+    POP = tools.selBest(POP+off, ARGS.pop)
+    hof.update(POP)
+    if g%20==0 or g==ARGS.gen:
+        print(f"Gen {g:3d}/{ARGS.gen}  best={hof[0].fitness.values[0]:,.0f}")
+
+best_plan = decode(hof[0])
+dump_excel(best_plan)
+
+# ────── 统计并打印风险指标 ─────────────────────────────────
+# ────── 统计并打印风险指标 ─────────────────────────────────
+area_best  = plan_area(best_plan)
+
+# 1) 仅经济利润（不含罚分）
+prof_econ  = profits_vector(area_best)            # shape (N,)
+mean_econ  = prof_econ.mean()
+cvar_econ  = np.partition(-prof_econ, -TAIL)[-TAIL:].mean()
+
+# 2) 目标函数用到的“利润-罚分”（已在 GA 内部最小化）
+profit_obj = prof_econ - penalty(best_plan)
+mean_obj   = profit_obj.mean()
+
+print("="*40)
+print(f"经济期望利润      : {mean_econ:,.0f} 元")
+print(f"经济 CVaR95%(亏损) : {cvar_econ:,.0f} 元")
+print(f"目标函数值(含罚分) : {hof[0].fitness.values[0]:,.0f} 元")
+print("="*40)
+\end{lstlisting}
