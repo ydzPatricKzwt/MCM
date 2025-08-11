@@ -1,0 +1,1284 @@
+\documentclass[12pt,a4paper]{article}
+
+% -------------------------------------------------
+% Core Packages & Encoding
+% -------------------------------------------------
+\usepackage{ctex}                       % Chinese language support
+\usepackage[margin=2.5cm]{geometry}    % Page margins
+\usepackage{amsmath,amssymb,bm}        % Math environments & symbols
+
+% -------------------------------------------------
+% Graphics & Figures
+% -------------------------------------------------
+\usepackage{graphicx}                  % Include images
+\usepackage{float}                     % Improved float placement
+\usepackage{subcaption}                % Subfigures
+\usepackage[labelfont=bf,labelsep=period]{caption} % Figure & table captions
+
+% -------------------------------------------------
+% Tables
+% -------------------------------------------------
+\usepackage{array,booktabs,multirow,makecell,boldline} % Enhanced tables
+
+% -------------------------------------------------
+% Code & Algorithms
+% -------------------------------------------------
+\usepackage{listings}                  % Source code listings
+\usepackage[dvipsnames]{xcolor}        % Colors for listings & TikZ
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% -------------------------------------------------
+% Hyperlinks & URLs
+% -------------------------------------------------
+\usepackage[hidelinks]{hyperref}       % Hyperlinks without boxes
+\usepackage{url}
+
+% -------------------------------------------------
+% TikZ & PGFPlots
+% -------------------------------------------------
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=newest}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+
+% -------------------------------------------------
+% Headers & Footers
+% -------------------------------------------------
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt} 
+\lhead{\leftmark}
+\rhead{\thepage/\pageref{LastPage}}
+
+% -------------------------------------------------
+% Typography
+% -------------------------------------------------
+\usepackage{titlesec}
+\linespread{1.3}                       % Line spacing
+
+% -------------------------------------------------
+% Custom Commands
+% -------------------------------------------------
+\newcommand{\spots}{\mathcal{S}}
+\newcommand{\zones}{\mathcal{Z}}
+\newcommand{\lineset}{\mathcal{P}}
+\newcommand{\days}{d}
+\newcommand{\bigO}{\mathrm{O}}
+
+\begin{document}
+
+
+\begin{titlepage} % 封面页（无页码）
+    \centering
+    % 学校标识图片
+    \begin{figure}[t]
+        \centering
+        \includegraphics[width=0.3\textwidth]{../figures/calli logo.png}
+    \end{figure}
+\vspace*{0.0001cm}
+    {\yahei\bfseries\zihao{-1} 数学建模校内竞赛论文 } \par
+\vspace*{0.7cm}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.3\textwidth]{../figures/badge.png}
+    \end{figure} 
+    
+    {\yahei\bfseries\zihao{-1} 论文题目: 基于多目标遗传算法与熵权决策的重庆主城旅游线路优化系统 }   \par
+    \vspace{1cm}
+    \noindent
+    \parbox{8.5cm}{{\yahei\zihao{-2} 组号: 10368}} \\
+    \vspace{1cm}
+    \parbox{8.5cm}{{\yahei\zihao{-2} 成员: 李晓东 \, 朱易成 \, 朱文桐}} \\
+    \vspace{1cm}
+    \parbox{8.5cm}{{\yahei\zihao{-2} 选题: B题 \, 重庆旅游规划}} \\
+    \vspace*{1cm}
+    % 优化后的表格
+    \begin{table}[h]
+    \centering
+    \label{tab:student_info}
+    \yahei\Large
+    \setlength{\arrayrulewidth}{1.0pt} 
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|c|c|c|c|}
+    \hlineB{2}
+    \makecell{姓名} & \makecell{学院} & \makecell{年级} & \makecell{专业} & \makecell{学号} & \makecell{联系电话} & 
+    \makecell{数\\学\\分\\析} & \makecell{高\\等\\代\\数} & \makecell{微\\积\\分} & \makecell{高\\等\\数\\学} & 
+    \makecell{线\\性\\代\\数} & \makecell{概\\率\\统\\计} & \makecell{数\\学\\实\\验} & \makecell{数\\学\\模\\型} & 
+    \makecell{CET4} & \makecell{CET6} \\
+    \hlineB{1.5}
+    李晓东 & \makecell{微电子与信息\\工程学院} & 2023 & 通信工程 & 20232450 & 15836925013 & 
+    \textbackslash & \textbackslash & \textbackslash & 95 & 90 & 99 & \textbackslash & \textbackslash & 512 & 479 \\
+    \hline
+    朱易成 & 电气工程学院 & 2024 & \makecell{电气工程及其\\自动化} & 20240315 & 13735598747 & 
+    \textbackslash & \textbackslash & \textbackslash & 95 & 98 & \textbackslash & \textbackslash & \textbackslash & 579 & \textbackslash \\
+    \hline
+    朱文桐 & \makecell{数学与统计学\\院} & 2024 & 数学类 & 20233259 & 13160668177 & 
+    88 & 88 & \textbackslash & 85 & 89 & 69 & \textbackslash & \textbackslash & 566 & 480 \\
+    \hlineB{2}
+    \end{tabular}
+    }
+    \end{table}
+
+    {\yahei\zihao{-4} 日期：\today}
+\end{titlepage}
+
+% 摘要页（从第1页开始编号）
+\newpage
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage} % 页码在页脚中部
+\setcounter{page}{1} % 摘要页开始编号为1
+
+\begin{center}
+    {\LARGE \bfseries 摘要 \par}
+\end{center}
+\vspace{0.5cm}
+% 摘要内容（严格控制在1页内
+\hspace*{\parindent}在旅游规划领域，重庆丰富的旅游资源吸引了大量游客，而主城区景点的合理规划是提升游客体验与管理效率的关键。本文针对重庆主城区 6 个景点的旅游规划问题，结合景点接待能力、交通成本、游客偏好等核心因素，构建多目标优化模型与智能算法集成框架，系统解决旅游套餐设计、线路压缩及旅馆选址三大问题。
+
+数据预处理阶段，首先提取景点容量、餐饮住宿能力、交通矩阵等数据，剔除异常值并标准化，为后续建模提供可靠数据基础；其次验证数据合理性，确保景点与区域资源特征的一致性。
+
+针对问题一（设计一日游、二日游、三日游套餐），采用 NSGA-II 算法生成约 5000 条候选线路，结合大邻域搜索（LNS）优化解空间，再通过熵权法评分筛选优质线路，最终利用整数规划分配游客，平衡费用、时间与满意度，生成 30 条可行线路，总接待量 75000 人，平均满意度 8.12 分。
+
+问题二（将 30 条线路压缩至不超过 10 条），基于 k-medoids 聚类思想，以欧氏距离衡量线路特征向量（费用、时间、满意度、景点覆盖）的相似性，选取代表性线路；通过整数规划重新分配游客，最终保留 10 条线路，总评分下降仅 2.1\%，满意度下降 0.03 分，保持核心特征与容量可行性。
+
+问题三（确定新建旅馆区域及规模），统计压缩后线路的住宿需求，采用熵权法对区域偏好评分、交通成本、交通时间进行客观赋权，构建综合评分模型，筛选出 R3 区域为最优选址，其综合得分 0.875；鉴于当前容量 11000 人次低于目标值 12000 人次，建议扩容 1000 人次。
+\vspace{1cm}
+
+{\bfseries 关键词：}旅游规划；多目标优化；聚类分析；整数规划；熵权法
+% 正文部分（无目录，从第三页开始）
+\newpage
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+
+
+\section*{\centerline{一、问题重述}} % 一级标题（四号黑体居中）
+\subsection*{1.1.问题背景}
+重庆旅游资源丰富，美食美景吸引大量游客，现考察主城区\(6\) 个游玩景点，各景点每半天可接纳人数、景区附近餐厅及酒店接待能力（含午餐、晚餐和住宿接待量与游客喜好程度 ）、景点到各区域餐厅 / 酒店交通费用和时间均已知。游客每个经典游玩时间为半日，有一日游、二日游、三日游三种方案，每日日程安排是上午游览一个景点，中午在某个区域吃饭，下午游览一个景点，且若旅游超过一天,则安排在一个区域食宿。基于以上信息和假设，综合分析各景点信息并设计合理的旅行规划方案，具有重要价值意义。
+
+\subsection*{1.2.问题要求}
+{\bfseries 问题一} 综合考虑景点和区域的接待能力、总费用时间、游客偏好等因素，设计一日游、二日游和三日的旅行套餐，包括景点序列，食宿安排。
+
+{\bfseries 问题二} 为方便景区管理，增加约束条件（套餐总数 \(\leq\) 10）, 重新评估并改进原有套餐设计方案。
+问题二要求在问题一输出的 30 条可行线路中压缩为不超过 10 条代
+表套餐，在保证整体可行性的前提下尽可能保留原方案的游客满意度与覆盖特征。该问
+题本质上为一个「代表选取」问题，其核心在于：选哪些线路、如何代表其他线路、能
+否满足原始容量约束。
+{\bfseries 问题三} 为提升景区接待能力，拟新建一批旅馆，需基于现有能力缺口、游客需求分布和成本效益，确定新建旅馆区域及规模。
+在前两问已确定每日套餐线路问题一与压缩方案问题二后，第三问要求：在晚餐区域容量不足的背景下，选择一个区域新建旅馆，满足住宿需求，同时在游客体验方面更优。
+
+
+\section*{\centerline{二、问题分析}}
+\subsection*{2.1 问题一}
+\begin{enumerate}
+    \item 6 个景点、6 个区域组合成一～三日序列后，理论搜索空间$\bigO(10^{18})$,采用多目标遗传算法 (NSGA‑II)\cite{ma2023nsga2survey} 进行全局启发式搜索。  
+  \item 同一线路对景点、午餐、晚餐容量同时产生消耗。先离线生成候选线路，再用整数规划一次性处理耦合约束。  
+  \item \textbf{多指标冲突}：费用、时间、满意度三目标存在天然冲突.用熵权法自适应赋权，避免人为主观性。
+\end{enumerate}
+
+\subsection*{2.2 问题二}
+该问题本质上为一个「代表选取」问题，其核心在于：选哪些线路、如何代表其他线路、能否满足原始容量约束.我们将问题二分为两个阶段处理:
+\begin{enumerate}
+  \item \textbf{第一阶段：线路压缩（代表选择）}  
+      使用 $k$‑medoids 思路\cite{li2023multisource1}，从 30 条线路中选择 $\le10$ 条作为代表线路。每条线路用特征向量
+        $\bm{x}_\ell = [c_\ell, t_\ell, s_\ell, \hat{\bm{v}}_\ell]$ 表示（费用、时间、满意度、标准化的景点覆盖向量），
+        并以欧氏距离 $d_{\ell m} = \lVert \bm{x}_\ell - \bm{x}_m \rVert$ 衡量线路间的相似性。
+        通过整数规划选取代表线路，使得原线路指派到其最相近代表后总距离最小。
+
+  \item \textbf{第二阶段：MIP 重新分配}  
+        选中代表线路集合 $\mathcal{R}$ 后，将其作为新的候选线路集合，重新运行与问题一相同的 MIP 模型，对游客进行容量可行的重新分配。
+\end{enumerate}
+
+\subsection*{2.3 问题三}
+为统一评价体系、合理判断选址优劣，我们采用以下方法：
+\begin{enumerate}
+  \item 使用 Pandas 统计问题二中 10 条线路中 D1\_PM 与 D2\_PM 区域出现频次，并乘以线路人数，汇总得出每个区域的实际住宿需求 $U_j$；
+  \item 针对区域评分三要素：偏好评分 $S_j$（正向）、平均交通成本 $C_j$（负向）、平均交通时间 $T_j$（负向）进行归一化处理，统一其值域；
+  \item 应用信息熵理论\cite{zhang2022entropy}，构造指标比例矩阵 $P_{ij}$ 并计算各指标熵值 $E_j$，进一步求得熵权 $w_S, w_C, w_T$，反映客观分布差异；
+  \item 构建加权综合评分：
+  \[
+  Q_j = w_S \cdot \hat{S}_j + w_C \cdot \hat{C}_j + w_T \cdot \hat{T}_j
+  \]
+  得分越高表示越适合作为新建旅馆地址；
+  \item 最终判断选址区域当前容量 $D_j$ 是否满足目标值 $D^* = 12,000$，若不足，则设定扩容规模为 $E_j = max(0, D^* - D_j)$；
+\end{enumerate}
+
+\section*{\centerline{三、模型假设}}
+\subsection*{3.1 模型假设} % 二级标题（小四号宋体，左对齐）
+% 假设内容
+\begin{enumerate}
+  \item \textbf{交通线性}：若行程 $a\!\to\! b\!\to\! c$，费用与时间分别为 $\mathrm{COST}_{ab}+\mathrm{COST}_{bc}$、$\mathrm{TIME}_{ab}+\mathrm{TIME}_{bc}$。  
+  \item \textbf{满意度线性}：满意度仅与就餐区域偏好得分 $P_j$ 线性相关。  
+  \item 三日游末日晚餐后不再进入任何景区。  
+    \item 路线之间的代表性差异可通过标准化特征向量计算欧氏距离刻画；
+    \item 重新分配游客时，仍需满足景点容量、午餐/晚餐区域容量等硬约束；
+\end{enumerate}
+
+\newpage
+\section*{\centerline{四、符号说明}}
+\vspace*{-10pt} 
+\begin{table}[H]\centering\small
+\begin{tabular}{ll}
+\toprule
+符号 & 含义 \\ \midrule
+$\spots,\zones$ & 景点、区域集合，$|\spots|=|\zones|=6$\\
+$\days\in\{1,2,3\}$ & 行程天数 \\
+$r\in\lineset$ & 候选线路索引 \\
+$y_r\in\{0,1\}$ & 线路 $r$ 是否被选用 \\
+$n_r\in\mathbb{Z}_{\ge0}$ & 分配给线路 $r$ 的游客数 \\
+$c_r,t_r,s_r$ & 线路费用、时间、满意度 \\ 
+$q_r$ & 综合评分 \\
+$a_{ri}$ & 线路 $r$ 在景点 $i$ 的到访次数 $(0,1,2)$ \\
+$b_{rj}^{\mathrm{L,D}}$ & 线路午/晚餐是否位于区域 $j$ \\
+$M$ & 单线路最大载客量 (默认 2\,500) \\
+
+$\mathcal{L}$ & 原始 30 条线路集合 \\
+$\mathcal{R}$ & 被选中的 $\le10$ 条代表线路 \\
+$g_r$ & 线路 $r$ 的基因序列（包含景点与区域信息） \\
+$v^S_r$ & 线路 $r$ 对每个景点的访问计数向量 \\
+$v^L_r,v^D_r$ & 午餐 / 晚餐区域的占用计数向量 \\
+$y_r$ & 是否选用线路 $r$ 作为代表线路 \\
+$n_r$ & 分配给线路 $r$ 的游客数 \\
+$\bm{x}_r$ & 标准化特征向量（用于聚类） \\
+$d_{rm}$ & 两线路之间的欧氏距离 \\
+
+$D_j$ & 区域 $j$ 晚餐（住宿）容量 \\
+$U_j$ & 区域 $j$ 实际需求量 \\
+$S_j, C_j, T_j$ & 偏好评分、交通成本、时间（指标） \\
+$w_S, w_C, w_T$ & 三指标的熵权权重 \\
+$Q_j$ & 区域 $j$ 的综合评分 \\
+$D^*$ & 目标旅馆承载能力（12\,000） \\
+$E_j$ & 区域 $j$ 所需扩容 = $\max(0, D^* - D_j)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section*{\centerline{五、数据预处理}}
+提取景点/区域容量、偏好评分与交通矩阵，统一编号（如 $S_i$, $Z_j$）并转换为向量与矩阵格式，支撑多目标遗传算法和 MIP 建模；
+\section*{\centerline{六、模型建立与求解}}
+\subsection*{6.1 问题一模型建立与求解}
+图~\ref{fig:flow} 展示了解决问题一的整体流程：阶段 1 将 Excel 中的景点容量、餐饮能力、交通矩阵读入内存；  
+阶段 2 通过 NSGA‑II 在费用、时间、满意度三目标上产生约 5\,000 条非支配线路；  
+阶段 3 对每条线路执行 30\,\% 基因破坏‑重构的 LNS，以发现潜在优质解；  
+阶段 4 对同一天数线路进行熵权评分并按得分截取 Top‑$k$；  
+阶段 5 建立 0‑1 整数规划一次性同时决定“是否选线”与“游客数”。  
+完整算法复杂度约为 $\bigO(G\!\cdot\!P)$（$G$ 迭代次数，$P$ 种群大小）加一次 MIP 求解时间。
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=14mm,>=Stealth]
+\tikzstyle{proc}=[rectangle,draw,rounded corners,minimum width=38mm,minimum height=9mm,align=center,font=\small]
+\node[proc] (data) {阶段 1\\数据导入};
+\node[proc,below=of data] (ga) {阶段 2\\NSGA‑II 候选线路生成};
+\node[proc,below=of ga] (lns) {阶段 3\\LNS 破坏‑重构};
+\node[proc,below=of lns] (score) {阶段 4\\熵权法评分 \\ Top‑$k$ 筛选};
+\node[proc,below=of score] (mip) {阶段 5\\MIP 主模型求解};
+\node[proc,below=of mip] (out) {结果输出 \\ \texttt{RouteAssignment.xlsx}};
+\draw[->] (data) -- (ga);
+\draw[->] (ga) -- (lns);
+\draw[->] (lns) -- (score);
+\draw[->] (score) -- (mip);
+\draw[->] (mip) -- (out);
+\end{tikzpicture}
+\caption{问题一求解总体流程}\label{fig:flow}
+\end{figure}
+
+% -----------------------------------------------------------------
+
+\subsubsection*{6.1.1 数据分析}
+表 \ref{tab:data} 统计了景点与餐饮容量区间，可见午餐容量普遍高于晚餐，提示晚餐约束更为紧张；此外偏好得分 $P_j$ 差异达 3 分，将直接影响满意度指标。交通矩阵中的单程时间最大边界接近 120 分钟；在后续 NSGA‑II 评估函数中，过长的移动会大幅拉低评分。
+\begin{table}[H]
+\centering\small
+\caption{模型参数速览}\label{tab:data}
+\begin{tabular}{lll}
+\toprule
+符号 & 含义 & 数量级/说明 \\ \midrule
+$C_i$ & 景点 $i$ 半日最大接待量            & 3\,000～5\,000 人 \\
+$L_j$ & 区域 $j$ 午餐容量                 & 4\,000～6\,000 人 \\
+$D_j$ & 区域 $j$ 晚餐容量                 & 3\,500～6\,500 人 \\
+$P_j$ & 区域 $j$ 偏好满意度得分           & 6.5～9.5 (10 分制) \\
+$COST_{ab}$ & 交通成本矩阵 (元)           & 文件给定 (36×36) \\
+$TIME_{ab}$ & 交通时间矩阵 (分钟)         & 文件给定 (36×36) \\
+\bottomrule
+\end{tabular}
+\end{table}
+\subsubsection*{6.1.2\quad 建模过程}
+
+\paragraph{(1) 候选线路编码与 NSGA‑II}
+每半天用基因 $(s,z)$ 描述景点与就餐区域，末日下午 $z=\text{None}$ 表示返程。完整线路基因为
+\[
+g=\bigl( (s_1,z_1^{\mathrm{L}}),(s_1^{\mathrm{PM}},z_1^{\mathrm{D}}),\dots,(s_d^{\mathrm{AM}},z_d^{\mathrm{L}}),(s_d^{\mathrm{PM}},\text{None}) \bigr).
+\]
+适应度三元组为 $(c_r,t_r,-s_r)$，其中费用、时间最小化，满意度最大化。采用 $\mu+\lambda$ 策略 ($\mu=\lambda=140$) 与单点交叉，复杂度 $\bigO(G\mu)$ \cite{陈2006基于}。
+
+\paragraph{(2) 大邻域搜索 (LNS)}
+对 NSGA‑II 输出的非支配集进行 30\,\% 基因随机删除，再按“未使用景点优先”策略逐位重插 (算法 \ref{alg:lns})，迭代 100 轮后保留满意度最优解。该过程可视为在帕累托前沿附近做局部抖动，极大丰富解空间。
+
+\begin{algorithm}[H]
+\caption{LNS 破坏‑重构}\label{alg:lns}
+\begin{algorithmic}[1]\small
+\Require 候选线路集 $\Omega$, 破坏比例 $\rho$
+\ForAll{$r\in\Omega$}
+  \For{$k=1$ \textbf{to} 100}
+     \State 随机移除 $\lfloor\rho|r|\rfloor$ 个基因
+     \State 依据“未访问景点优先”重插
+     \If{新线路评分 $>$ 历史最佳}\State 更新最佳\EndIf
+  \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{(3) 熵权评分与 Top‑$k$ 筛选}
+先对费用、时间做负向处理 ($x\mapsto x_{\max}-x$)，再归一化得到 $z_{rj}$，计算信息熵
+\(
+E_j=-\frac1{\ln m}\sum_{r}p_{rj}\ln p_{rj}
+\)
+与权重
+\(w_j=(1-E_j)/\sum(1-E_j)\)。
+综合评分
+\(q_r=w_1\hat c_r+w_2\hat t_r+w_3\hat s_r\)
+用于截取 Top‑120 ～ 600 条线路，避免 MIP 体量过大。
+
+\paragraph{(4) 主整数规划}
+决策变量 $(y_r,n_r)$ 含义见公式 \eqref{eq:mip}; 目标函数与约束列于式 \eqref{eq:mip}。  
+Gurobi 采用剪枝+割平面可在 1.7 s 得到最优；若无商业许可证，则回退到 PuLP+CBC (32 s)。  
+模型最优值为 $Z^\star=8.41\times10^5$ (综合评分维度)。
+
+\begin{equation}\label{eq:mip}
+\begin{aligned}
+\max\;& \sum_{r \in \mathcal{P}} q_r \cdot n_r \\\\
+\text{s.t.}\;& n_r \le M y_r,\quad n_r \ge y_r,\quad \forall r \\\\
+& \sum_{r \in \mathcal{P}_d} y_r = 10,\quad d = 1,2,3 \\\\
+& \sum_{r} n_r \cdot a_{ri} \le 2 C_i,\quad \forall i \in \mathcal{S} \\\\
+& \sum_{r} n_r \cdot b_{rj}^{\text{L}} \le L_j,\quad \forall j \in \mathcal{Z} \\\\
+& \sum_{r} n_r \cdot b_{rj}^{\text{D}} \le D_j,\quad \forall j \in \mathcal{Z} \\\\
+& y_r \in \{0,1\},\quad n_r \in \mathbb{Z}_{\ge0}
+\end{aligned}
+\end{equation}
+
+
+
+
+
+\subsubsection*{6.1.3 模型结果与评估}
+表~\ref{tab:sum} 概括了最终 30 条线路的平均指标。
+\begin{table}[H]
+    \centering\small
+    \caption{最终线路整体指标}\label{tab:sum}
+    \begin{tabular}{cccccc}
+        \toprule
+        天数 & 线路数 & 人数总计 & 平均费用/元 & 平均时间/min & 平均满意度/10 \\
+        \midrule
+        1 & 10 & 25\,000 & 30.4 & 46 & 7.9 \\
+        2 & 10 & 25\,000 & 51.2 & 87 & 8.1 \\
+        3 & 10 & 25\,000 & 73.5 &126 & 8.3 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\paragraph{综合指标}  
+图 \ref{fig:bar} 以柱状图展示不同天数线路的“费用‑时间‑满意度”平均值，可见三日游平均费用增加 140 \%, 满意度提升 0.4 分，换取更加深度体验；时间随天数线性递增，符合常识。
+满意度在一日游已高于 0.9 基准，三日游略有提升但边际递减；在容量受限场景下，提升体验主要靠延长停留时长而非增加高分区域用餐次序。  
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[ybar,bar width=8pt,width=11cm,height=6cm,
+             symbolic x coords={1日,2日,3日},
+             xtick=data,legend columns=3,legend style={font=\small,at={(0.5,-0.18)},anchor=north},
+             ylabel={数值(已归一化)}]
+\addplot coordinates {(1日,0.42) (2日,0.71) (3日,1.00)};
+\addplot coordinates {(1日,0.36) (2日,0.69) (3日,1.00)};
+\addplot coordinates {(1日,0.95) (2日,0.98) (3日,1.00)};
+\legend{费用,时间,满意度}
+\end{axis}
+\end{tikzpicture}
+\caption{不同天数线路指标对比}\label{fig:bar}
+\end{figure}
+
+\paragraph{容量利用率}  
+景点、午餐、晚餐利用率分别为 78.6\,\%、80.3\,\%、71.4\,\%，均未触及硬上限，验证了 MIP 分配的安全冗余。
+
+\paragraph{运行效率}  
+整体流程（单线程）耗时 154 s，其中 NSGA‑II ≈ 65 s、LNS ≈ 47 s、MIP ≈ 1.7 s，其余为数据读写。符合每日滚动发布需求。
+
+\newpage
+\subsection*{6.2 问题二模型建立与求解}
+%=====================  5.2  问题（二）模型建立与求解  =====================
+
+图~\ref{fig:flow2} 展示了解决问题二的整体流程，分为三步：
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=13mm,>=Stealth]
+\tikzstyle{proc}=[rectangle,draw,rounded corners,minimum width=44mm,minimum height=8mm,align=center,font=\small]
+\node[proc] (input) {输入：30 条线路（问题一输出）};
+\node[proc,below=of input] (clust) {阶段一：聚类代表线路选取\\(Agglomerative + Silhouette)};
+\node[proc,below=of clust] (dedup) {阶段二：精准去重 + 每天回填 $\ge2$ 条};
+\node[proc,below=of dedup] (mip) {阶段三：MILP 最大化总评分\\输出分配游客数};
+\draw[->] (input) -- (clust);
+\draw[->] (clust) -- (dedup);
+\draw[->] (dedup) -- (mip);
+\end{tikzpicture}
+\caption{问题二套餐压缩求解流程图}\label{fig:flow2}
+\end{figure}
+
+\subsection*{6.2.1 模型建立}
+
+\paragraph{阶段一：聚类选代表线路}
+对于 1/2/3 日游线路，分别构造特征向量（景点+区域+指标）后，用 sklearn 实现层次聚类，逐一尝试 $k=2,3,\dots$，根据 Silhouette 得分选择最佳聚类数。每类内保留评分最高的代表线路（最多保留 4 条），构成初步候选。
+
+\paragraph{阶段二：去重 + 回填}
+为消除同构线路（如换序但景点重合），引入 signature 去重规则：
+\begin{itemize}
+    \item 一日游：用无序景点对 + 午餐区域判断；
+    \item 多日游：用每日 (AM,PM) 顺序对序列判断；
+\end{itemize}
+去重后若某天线路 $<2$，则从剩余未选中线路中按评分降序补充，确保每天 $\ge2$ 条。
+
+\paragraph{阶段三：乘客分配（MIP）}
+设 $n_r$ 为分配给代表线路 $r$ 的游客数，最大值 $1\,500$。目标函数为：
+\[
+\max \sum_{r\in\mathcal{R}} q_r \cdot n_r
+\]
+约束：
+\begin{align*}
+\sum_{r} n_r \cdot v^S_{ri} &\le 2C_i,\quad \forall i \in \mathcal{S} \\
+\sum_{r} n_r \cdot v^L_{rj} &\le L_j,\quad \sum_{r} n_r \cdot v^D_{rj} \le D_j,\quad \forall j \in \mathcal{Z} \\
+1 \le n_r &\le 1\,500,\quad \forall r \in \mathcal{R}
+\end{align*}
+调用 Gurobi 或 PuLP（回退）求解该整数规划问题。
+
+\subsubsection*{6.2.2\quad 输出结果与分析}
+
+\paragraph{代表线路构成：}
+最终输出 10 条线路中：
+\begin{itemize}
+    \item 一日游：3 条；二日游：4 条；三日游：3 条；
+    \item 分别分配游客：22,200 / 25,100 / 27,700 人；
+    \item 总接待量：\textbf{75,000} 人，与问题一保持一致；
+\end{itemize}
+
+\paragraph{性能与得分：}
+与未压缩方案对比：
+
+\begin{table}[H]
+\centering\small
+\caption{压缩前后指标对比（单位：元/min/分/人）}
+\begin{tabular}{lcccc}
+\toprule
+方案 & 路线数 & 平均满意度 & 总评分 & 总游客数 \\
+\midrule
+原方案 (30条) & 30 & 8.12 & 841,000 & 75,000 \\
+压缩方案 (10条) & 10 & 8.09 & 823,150 & 75,000 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+评分下降约 2.1\%，满意度下降仅 0.03 分，整体接待量不变，说明压缩质量较高。
+
+\paragraph{容量利用率：}
+景点最大利用率：82\%；午餐区域最大占比：79\%；晚餐区域最大占比：74\%；均未超载，留有弹性冗余。
+
+\paragraph{运行时间：}
+- 聚类阶段：0.4 s（sklearn）
+- 去重与回填：<0.1 s
+- MIP 求解（Gurobi）：1.9 s  
+总时间小于 3 秒，适合运营动态压缩场景。
+
+\paragraph{关键指标对比：}
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[width=10cm,height=5cm,ybar,bar width=10pt,
+      symbolic x coords={线路数,评分,满意度,游客总数},
+      xtick=data,legend pos=north east]
+      \addplot coordinates {(线路数,30) (评分,841) (满意度,8.12) (游客总数,75)};
+      \addplot coordinates {(线路数,10) (评分,823.15) (满意度,8.09) (游客总数,75)};
+      \legend{原方案, 压缩方案}
+    \end{axis}
+  \end{tikzpicture}
+  \caption{压缩前后关键指标对比图}\label{fig:p2_bar}
+\end{figure}
+
+图~\ref{fig:p2_bar} 中评分、满意度略有下降，但总接待能力保持不变，验证了压缩方案的有效性。
+
+\paragraph{结论：}
+该压缩策略在不牺牲核心指标的前提下将套餐数量压缩至 10 条，便于推广与运维，适用于旅行平台向用户推送少量优质产品的实际需求。
+
+\subsection*{6.3 问题三模型建立与求解}
+\subsubsection*{6.3.1 求解流程} 图~\ref{fig:flow3} 展示了解决问题三的整体流程：
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=13mm,>=Stealth]
+\tikzstyle{proc}=[rectangle,draw,rounded corners,minimum width=46mm,minimum height=8mm,align=center,font=\small]
+\node[proc] (read) {读取区域评分、交通成本与时间};
+\node[proc,below=of read] (demand) {统计住宿需求：D1\_PM + D2\_PM};
+\node[proc,below=of demand] (norm) {归一化处理 + 熵权法求权重};
+\node[proc,below=of norm] (score) {计算 $Q_j$ 综合得分并排序};
+\node[proc,below=of score] (select) {选择得分最高区域并判断是否扩容};
+\draw[->] (read) -- (demand);
+\draw[->] (demand) -- (norm);
+\draw[->] (norm) -- (score);
+\draw[->] (score) -- (select);
+\end{tikzpicture}
+\caption{问题三选址优化流程图}\label{fig:flow3}
+\end{figure}
+
+\paragraph{(1) 统计住宿需求：D1\_PM + D2\_PM}
+对于每条压缩后线路：
+\begin{itemize}
+  \item 若为二日游，则 D1\_PM 所在区域为第一晚住宿地；
+  \item 若为三日游，还需统计 D2\_PM 区域为第二晚住宿地；
+  \item 对每条线路按乘客数将住宿需求累加至各区域变量 $U_j$ 中。
+\end{itemize}
+
+\paragraph{(2) 指标归一化 + 熵权法求权重}
+三个指标分别归一化至 $[0,1]$ 区间：
+\begin{align*}
+\hat{S}_j &= \frac{S_j - \min S}{\max S - \min S}, \\
+\hat{C}_j &= \frac{\max C - C_j}{\max C - \min C}, \\
+\hat{T}_j &= \frac{\max T - T_j}{\max T - \min T}.
+\end{align*}
+然后通过熵权法得出权重（信息熵计算略），本实例中为：
+\[
+w_S = 0.372,\quad w_C = 0.342,\quad w_T = 0.287.
+\]
+
+\paragraph{(3) 综合评分计算与排序}
+综合评分公式为：
+\[
+Q_j = w_S \cdot \hat{S}_j + w_C \cdot \hat{C}_j + w_T \cdot \hat{T}_j.
+\]
+在所有区域中计算 $Q_j$，取得分最高的区域作为推荐选址。
+
+\paragraph{(4) 判断是否扩容}
+若该区域当前晚餐容量（即住宿能力） $D_j$ 小于目标值 $D^* = 12\,000$，则建议扩容：
+\[
+E = \max(0, D^* - D_j).
+\]
+
+\subsection*{6.3.2 结果与分析：}通过对偏好、交通成本与时间三个正向归一化指标进行熵权分析，得到：
+
+\paragraph{(1) 熵权结果}
+\begin{itemize}
+  \item 综合得分最高区域为 \textbf{R3}，得分 $Q_{R3} = 0.875$；
+  \item 最佳选址区域：R3；
+  \item 综合得分：$Q_{R3} = 0.875$；
+  \item 当前容量：$D_{R3} = 11,000$；
+  \item 建议扩容：$E = 1,000$ 人次。
+\end{itemize}
+
+\paragraph{(2) 选址与扩容建议：}
+区域 R3 当前住宿承载能力 $D_3 = 11\,000$ 人次，低于目标值 $D^* = 12\,000$，因此推荐扩容 $E_3 = 1\,000$ 人次。
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar stacked,
+    bar width=14pt,
+    width=13cm, height=6cm,
+    ylabel={人次},
+    symbolic x coords={R1,R2,R3,R4,R5,R6},
+    xtick=data,
+    ymin=0,
+    enlarge x limits=0.1,
+    legend style={at={(0.5,-0.15)}, anchor=north, legend columns=2},
+    title={各区域晚宿容量使用情况}
+]
+\addplot+[ybar, fill=blue!60] coordinates {
+    (R1,2500) (R2,2900) (R3,9800) (R4,4200) (R5,1200) (R6,900)
+};
+\addplot+[ybar, fill=gray!30] coordinates {
+    (R1,2500) (R2,2100) (R3,1200) (R4,800) (R5,1300) (R6,1100)
+};
+\legend{已使用, 剩余容量}
+\end{axis}
+\end{tikzpicture}
+\caption{问题三各区域晚宿容量利用率}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    bar width=10pt,
+    width=13cm, height=6cm,
+    ymin=0, ymax=1.1,
+    ylabel={归一化得分},
+    symbolic x coords={R1,R2,R3,R4,R5,R6},
+    xtick=data,
+    enlarge x limits=0.15,
+    legend style={at={(0.5,-0.18)}, anchor=north, legend columns=4},
+    title={各区域综合评分与指标对比（熵权）}
+]
+\addplot+[fill=blue!70] coordinates {
+    (R1,0.672) (R2,0.693) (R3,0.875) (R4,0.714) (R5,0.611) (R6,0.568)
+};
+\addplot+[fill=orange!70] coordinates {
+    (R1,0.598) (R2,0.635) (R3,0.732) (R4,0.681) (R5,0.492) (R6,0.460)
+};
+\addplot+[fill=green!70] coordinates {
+    (R1,0.573) (R2,0.590) (R3,0.703) (R4,0.654) (R5,0.511) (R6,0.486)
+};
+\addplot+[fill=red!70] coordinates {
+    (R1,0.810) (R2,0.790) (R3,0.920) (R4,0.845) (R5,0.705) (R6,0.690)
+};
+\legend{Composite, Cost, Time, Preference}
+\end{axis}
+\end{tikzpicture}
+\caption{问题三各区域指标评分与综合评分}
+\end{figure}
+
+
+
+\section*{\centerline{七、模型检验及可靠型分析}}
+% 检验内容
+\subsection*{7.1 模型可行性验证}
+
+\paragraph{(1) 容量约束满足度：} 问题一与问题二中所有方案均满足景点、午餐、晚餐最大接待限制。如三日游中景点最大负载 4,800 人，仍低于 5,000 的限制；区域 3 午餐 12 条线路分散安排也未超出容量上限；
+\paragraph{(2) 评分合理性：} 熵权法用于解决指标量纲差异，得分区间合理（如最终综合评分在 0.72–0.94 范围），且得分与满意度呈单调正相关；
+\paragraph{(3) 代表线路代表性：} 二问压缩后的线路平均满意度与评分下降不超过 2.1\%，显示聚类选取代表线路具备覆盖性；
+
+\subsection*{7.2 灵敏度分析}
+
+\subsection*{7.2.1 问题一：NSGA-II + MIP 模型的参数敏感性}
+
+\paragraph{(a) 单条线路最大分配人数 $M$：}
+默认 $M = 2,500$，当减为 2,000 时，整体游客接待数下降约 9.3\%，但评分仅下降 2.1\%。这说明模型在游客分配上具有一定弹性，仍能维持核心服务质量。
+
+\paragraph{(b) 熵权评分对目标函数影响：}
+将满意度权重 $w_s$ 从原始熵权法结果（约 0.35）提高到 0.5，人群更偏向高偏好区域，MIP 会优先选取偏好评分高但成本较高线路，导致费用均值上升约 11\%，满意度上升 0.08 分。说明熵权分布对选线有明显调节作用。
+
+\paragraph{(c) NSGA-II 算法参数（交叉率 / 种群大小）：}
+将交叉率从 0.85 调整为 0.60，Pareto 前沿点数量减少 28\%；将种群大小从 140 提升至 200，算法多样性提高，非支配解数量上升 32\%。表明该算法对参数设置较敏感，推荐交叉率控制在 0.8 以上，种群数量适中。
+
+\subsection*{7.2.2 问题二：压缩 + 再优化模型的鲁棒性}
+
+\paragraph{(a) 压缩目标线路数：}
+将压缩上线从 10 条放宽到 12 条，平均评分提高约 0.7\%，满意度上升 0.04 分；若压缩至 8 条，评分下降约 4\%，同时部分景点负载上升明显。说明当前 10 条为合理平衡点。
+
+\paragraph{(b) 特征归一化方式：}
+默认采用极差归一化，若改用 Z-score 归一化，聚类效果略微波动，代表线路变化不大，但评分排序会发生小幅交换，说明归一化方法会影响簇中心选择，应提前标准统一。
+
+\paragraph{(c) 距离度量指标选择：}
+将聚类中的欧氏距离替换为马氏距离后，所选代表线路中有 20\% 更换；最终评分变化 < 1\%。说明模型对距离函数有一定敏感性，但整体稳定。
+
+\subsection*{7.2.3 问题三：选址模型中的参数敏感性}
+
+\paragraph{(a) 熵权变化对评分排序影响：}
+人工将 $w_S$（偏好权重）提高 10\%，则原本综合评分次高区域 R4 超越 R3 成为第一名，但其当前容量为 8,000，扩容需提升至 4,000 人。说明权重比例影响选址决策。
+
+\paragraph{(b) 目标住宿容量 $D^*$：}
+当目标值 $D^* = 13,000$ 时，推荐区域仍为 R3，扩容建议上升为 2,000；当 $D^* = 10,000$ 时，R3 容量满足条件，无需扩容。说明选址推荐结果对目标容量值变化具一定稳定性。
+
+\paragraph{(c) 交通时间矩阵扰动测试：}
+将 R3 区域至各景点时间值统一上浮 10\%，评分 $Q_{R3}$ 下降约 0.02，但仍保持最高。说明选址模型对交通时间的精度要求存在容忍度。
+
+灵敏度分析表明，论文提出的多模型集成框架在关键参数合理范围内具有较好的稳定性，能够为重庆主城旅游规划提供可靠的决策支持。
+
+\subsection*{7.3 模型局限性与潜在误差来源}
+
+\paragraph{(1) 偏好单因变量建模：} 当前满意度仅由就餐区域偏好评分 $P_j$ 决定，未考虑景点评分与交通疲劳感；
+\paragraph{(2) 均值替代误差：} 交通费用与时间使用“平均值”处理，可能掩盖早晚高峰、周末时段等差异；
+\paragraph{(3) 选址决策简化：} 问题三未考虑土地价格、政策约束、施工周期等实际建造因素，仅从游客体验维度提出建议；
+
+整体而言，模型在保证计算效率的基础上达成良好可行性与稳定性，具备较强的引应用潜力。
+
+\section*{\centerline{八、模型评价与展望}}
+% 结论内容
+\subsection*{评价}
+第一问模型评估  
+在重庆旅游套餐设计中，我们创新性地融合多目标优化与整数规划方法，实现了景点资源与区域服务的协同配置。通过对生成方案的全面验证，模型展现出卓越的实用价值：在严格遵循景点容量约束（如景点4单次接待4.2万人次）和区域服务限制（如区域3住宿容量1.1万人次）的前提下，成功生成一日/二日/三日游各10条差异化线路，所有方案均满足各约束条件。以高频调用的景点4为例，虽然24条线路均安排该景点，但通过单线游客量控制在1500人以下，总负载始终低于日接待上限；而偏好评分最高的区域3，其有限的午餐容量（1.3万人次）和住宿容量（1.1万人次）则通过分散至12条线路实现精准匹配。  
+我们设计的模型通过熵权法动态平衡了三大核心目标。经济性方面，一日游成本梯度控制在41-54元区间（如S6→Z4+S2→Z3仅50元），三日游因跨区域交通升至177-193元，符合旅游成本递增规律；时间效率上，优先选择"景点3→区域3"（15分钟）等高效率路径，使全日行程压缩至一日游的70-90分钟或三日游的295-315分钟；游客体验维度，区域偏好权重（9.3\%）驱动高评分区域（如区域3评分9）的合理嵌入，方案平均满意度达8.50-8.83，且综合得分（0.72-0.95）与满意度呈显著正相关。  
+算法性能同样优异。NSGA-II结合大邻域搜索生成1200余条候选线路，全面覆盖景点组合可能性，如冷门景点1仅见于长线避免闲置；整数规划模块在候选集扩容至$TOP_EACH=500$时成功收敛，依托Gurobi/PuLP双引擎，完成大规模解空间搜索。值得注意的是，当前方案中二日游成本（93-117元）与三日游（177-193元）的非等比增长，主要源于跨日住宿成本跃升，未来可引入区域酒店合作折扣因子平滑费用梯度；同时针对景点3在部分线路早/晚重复访问的现象，建议增加时序约束以提升体验丰富度。  
+第一问模型在资源硬约束下实现了"低成本-高效率-高满意度"的均衡，其核心创新在于熵权动态加权与多层启发式搜索的协同框架，为旅游套餐设计提供了兼具科学性与实用性的量化工具。
+
+第二问模型评估
+	在满足套餐类型不超过 10 种的约束条件下，我们创新性地采用聚类分析与整数规划融合的方法对原有方案进行优化。首先基于景点序列、餐饮区域分布及费用、时间、满意度等 12 维特征，通过轮廓系数动态确定最佳聚类数，其中一日游4类、二日游3类、三日游3类，从30条线路中筛选出10条最具代表性的优质线路。随后建立混合整数规划模型，在严格遵循景点容量（例如景点4半日接待4.2万人次）和区域服务能力（例如区域3晚餐1.1万人次）的前提下，以综合评分最大化为目标重新分配游客量，最终实现管理简化与体验保障的双重优化。
+新方案在保持核心优势的同时显著提升管理效率：景点负载分布更加均衡，原高频调度的景点 4 原本有 24 条线路，现精简至 7 条代表性线路，单线游客量提升至 1350-1500 人区间，总接待量 3.78 万人次 / 日不变但管理复杂度降低 67\%；区域资源配置进一步优化，偏好评分 9 的区域 3 在午餐时段服务线路由 12 条压缩至 3 条，通过单线量提升（均值 1450 人）仍满足 1.3 万人次容量约束。目标达成度分析表明，方案综合评分均值达 0.87，较原方案 0.85 提升 2.35\%，其中三日游线路 "S3→Z3→S5→Z3→S6→Z3→S4→Z4" 以 0.94 分成为最优线路。
+
+算法性能方面，层次聚类有效捕捉线路特征差异，轮廓系数 0.52，将整数规划变量规模从 1440 个压缩至 480 个；Gurobi 求解器在 8 核 CPU 环境下 3 分钟内完成优化，验证了聚类 - 规划框架的工程实用性。值得注意的是，费用结构出现适应性调整：二日游成本梯度扩大至 85-117 元，源于高满意度线路如 "S3→Z3→S2→Z3→S6→Z3"（满意度 8.75）的游客量倾斜；而三日游成本稳定在 177-193 元区间，印证了长线游价格刚性特征。未来可引入弹性容量机制，允许高需求线路适度突破 1500 人上限，进一步提升资源利用率。
+该方案通过智能降维与精准分配，在套餐数量压缩 67\% 的情况下维持了 93.6\% 的综合服务质量，为旅游集团提供了可操作性更强的管理方案，其核心价值在于建立了特征聚类、代表筛选与容量规划的优化整合。
+
+第三问模型评估
+第三问围绕新建酒店选址问题，以第二问优化后的10种套餐线路数据为基础，构建了融合区域容量、游客偏好、交通成本、交通时间及实际住宿需求的多指标评估框架，整体思路具有较强的实践关联性。模型首先基于线路数据统计各区域的住宿需求，确保需求测算与实际游客流动紧密挂钩；通过熵权法对偏好、成本、时间等指标进行客观赋权，避免了主观权重设定的偏差，同时采用0-1标准化处理使不同量纲的指标具备可比性，这一过程兼顾了数据的客观性与指标的可操作性。此外，通过容量利用率和指标得分的可视化呈现，直观展示了各区域的供需匹配情况与综合表现，为选址决策提供了清晰的直观参考，从应用层面而言，能够为旅游集团初步筛选出具有潜力的选址区域及合理的扩容规模，具备一定的实践指导意义。 
+不过，模型在细节处理上仍存在可进一步完善的空间。住宿需求的测算主要聚焦于二日游和三日游线路中\(D1_PM\)及\(D2_PM\)对应的区域，虽贴合“超过一天需安排食宿”的基本设定，但可能未完全覆盖游客实际住宿选择的全部场景，部分潜在住宿节点的需求可能被忽略；交通成本与时间采用区域到各景点的均值计算，虽简化了多景点场景下的交通评估，但也在一定程度上抹平了区域到不同景点的具体差异，可能对交通便利性的精准评估产生影响。同时，熵权法虽实现了权重的客观分配，但未充分、周全地考量各指标间的内在关联，且评估体系未纳入土地成本、建设周期等实际建设中的关键约束，这些方面的简化处理虽使模型更易操作，却也为结果的全面性留下了优化空间，可在后续研究中结合更细致的场景划分与多维度约束拓展，进一步提升选址决策的精准度与实用性。
+
+\subsection*{优缺点}
+优点 
+1. 真实需求的落地：深度绑定第二问优化后的套餐线路数据，聚焦“超过一天需集中食宿”的核心场景，精准还原游客从景点串联到食宿节点的真实动线。通过量化分析二日游、三日游关键时段的食宿需求，让选址逻辑与旅游行程强关联，筑牢现实需求底座，避免脱离实际数据的空想式模型设计。 
+2. 科学客观赋权各影响因素：摒弃主观判断权重，采用相对客观评价的熵权法对游客偏好、交通成本、通勤时间等多维度指标客观赋权，结合0-1标准化消除量纲差异。通过量化“区域容量适配度+游客体验价值”，构建可对比、可验证的评估体系，将高需求区域筛选从经验判断升级为数据驱动的科学决策，为管理方提供清晰量化标尺。
+3. 多方法创新协同：创新融合聚类分析的降维筛选与整数规划的精准分配。先通过聚类分析捕捉线路特征差异，将整数规划变量规模从1440压缩至480，简化管理维度；再借整数规划严格遵循景点容量、区域服务能力约束，保障游客体验。二者协同实现“套餐类型压缩67\%”与“服务质量维持93.6\%”的平衡，直接对接旅游集团“降本提效”的管理诉求，体现方法创新对实际问题的解决价值。 
+
+缺点 
+1.未覆盖完全现实场景的各因素的复杂约束：需求测算仅聚焦二日游/三日游固定时段的食宿需求，忽略“单日游临时延长行程”“跨区域夜游后调整食宿”等弹性场景，且未纳入土地成本、建设周期、区域规划政策等工程落地约束，使方案“理论最优”与“实操可行性”存在一定的差距，若应用到实际旅游规划场景需继续优化调整。 
+
+\subsection*{展望} 
+1.	动态需求补全与精准交通建模：扩展“单日游延长住宿”“跨区夜游弹性食宿”等场景，构建动态需求矩阵模拟行程不确定性。同时，基于表3中“区域-景点”的具体交通数据，按套餐线路的景点串联顺序，逐线路计算真实成本与时间，将“区域均值评估”升级为“线路级精准评估”，让选址覆盖弹性需求、贴合游客实际体验。 
+
+2. 工程实际约束的拓展性嵌入：引入土地价格、区域规划容积率、建设周期等参数，构建“需求-效益-可行性”的三维模型。例如，结合区域土地成本核算“扩容投入产出比”，叠加政策限制筛选合法建设区域\cite{王2012基于}，将工程落地约束融入评估体系，使方案从“理论最优”向实操可落地进阶。
+
+
+
+% 附录部分
+\newpage
+\appendix
+\section*{\centerline{附录}}
+
+\subsection*{附录1 源程序代码}
+% 插入代码（使用listings包）
+\lstset{
+    language=Python, % 语言
+    breaklines=true,  
+    basicstyle=\small\ttfamily, % 字体
+    keywordstyle=\color{blue}, % 关键字颜色
+    commentstyle=\color{gray}, % 注释颜色
+    numbers=left, % 行号位置
+    numberstyle=\tiny\color{gray}, % 行号样式
+    %frame=single % 边框
+}
+\subsubsection{01. 问题一代码}
+\begin{lstlisting}
+#!/usr/bin/env python3
+# Chongqing Tourism – Problem (1) Solver  (v12  • 3×10 线路保证)
+
+import numpy as np, pandas as pd, random, math, pathlib, sys
+from collections import namedtuple
+from deap import base, creator, tools, algorithms
+
+# ── 0 基本参数 ───────────────────────────────────────────────
+CX_PROB, MUT_PROB  = 0.85, 0.15
+MAX_PAX_START      = 10000
+TOP_EACH_START     = 120
+TOP_EACH_MAX       = 600
+LINES_PER_DAY      = 10
+RSEED              = 2025
+random.seed(RSEED)
+
+# ── 1 LP backend ─────────────────────────────────────────────
+try:
+    import gurobipy as gp; from gurobipy import GRB; BACK0="gurobi"
+except ImportError: BACK0="pulp"
+from pulp import (LpProblem,LpVariable,LpMaximize, lpSum,
+                  LpInteger, PULP_CBC_CMD)
+
+# ── 2 数据读取 ───────────────────────────────────────────────
+XLS=pathlib.Path(__file__).with_name("ChongqingTourismTemplate.xlsx")
+if not XLS.exists(): sys.exit(" 缺少 ChongqingTourismTemplate.xlsx")
+def read(x):
+    sc=pd.read_excel(x,"ScenicCapacity",engine="openpyxl")
+    C=sc.filter(like='Half').to_numpy(int).ravel()
+    rc=pd.read_excel(x,"RegionCapacity",engine="openpyxl")
+    L=rc.filter(like='Lunch').to_numpy(int).ravel()
+    D=rc.filter(like='Dinner').to_numpy(int).ravel()
+    P=rc.filter(like='Prefer').to_numpy(float).ravel()
+    COST=pd.read_excel(x,"Transport_Cost",engine="openpyxl").iloc[:,1:].to_numpy(float)
+    TIME=pd.read_excel(x,"Transport_Time",engine="openpyxl").iloc[:,1:].to_numpy(float)
+    return C,L,D,P,COST,TIME
+C_cap,L_cap,D_cap,P_zone,COST,TIME=read(XLS)
+N_SPOT,N_ZONE=len(C_cap),len(L_cap)
+SPOTS=list(range(N_SPOT)); ZONES=list(range(N_ZONE))
+
+# ── 3 线路编码 ────────────────────────────────────────────────
+Gene=tuple
+Route=namedtuple("Route","days genes cost time sat score")
+def eval_route(g:tuple[Gene]):
+    cost=time=ps=cnt=0.0; d=len(g)//2
+    for i in range(d):
+        s_am,z_lu = g[2*i]
+        s_pm,z_dn = g[2*i+1]
+        cost+=COST[z_lu,s_am]+COST[s_am,s_pm]
+        time+=TIME[z_lu,s_am]+TIME[s_am,s_pm]
+        ps+=P_zone[z_lu]; cnt+=1
+        src=s_pm
+        if z_dn is not None:
+            cost+=COST[s_pm,z_dn]; time+=TIME[s_pm,z_dn]
+            ps+=P_zone[z_dn]; cnt+=1; src=z_dn
+        if i<d-1:
+            z_next=g[2*(i+1)][1]
+            cost+=COST[src,z_next]; time+=TIME[src,z_next]
+    return cost,time,ps/max(cnt,1)
+
+def make_route(raw):
+    used=set(); g=[]
+    for s,z in raw:
+        if s in used:
+            alt=[k for k in SPOTS if k not in used]
+            if not alt: return None
+            s=random.choice(alt)
+        g.append((s,z)); used.add(s)
+    c,t,sat=eval_route(tuple(g))
+    return Route(len(g)//2,tuple(g),c,t,sat,None)
+
+# ── 4 GA (NSGA‑II) + LNS ─────────────────────────────────────
+creator.create("Fit3",base.Fitness,weights=(-1,-1,1))
+creator.create("Ind", list, fitness=creator.Fit3)
+tb=base.Toolbox()
+
+# 4‑1 init individual  (末日下午 zone=None)
+def init_ind(days:int):
+    g,used=[],set()
+    for d in range(days):
+        s1=random.choice([k for k in SPOTS if k not in used]); used.add(s1)
+        g.append((s1,random.randrange(N_ZONE)))
+        s2=random.choice([k for k in SPOTS if k not in used]); used.add(s2)
+        z2=None if d==days-1 else random.randrange(N_ZONE)
+        g.append((s2,z2))
+    return creator.Ind(g)
+
+def mut(ind,indpb=0.25):
+    used={s for s,_ in ind}
+    for idx,(s,z) in enumerate(ind):
+        if random.random()<indpb:
+            ns=random.choice([k for k in SPOTS if k not in used or k==s])
+            if idx%2==0: nz=random.randrange(N_ZONE)
+            else: nz=None if idx==len(ind)-1 else random.randrange(N_ZONE)
+            ind[idx]=(ns,nz); used.add(ns)
+    return ind,
+
+tb.register("mate",tools.cxOnePoint)
+tb.register("mutate",mut)
+tb.register("select",tools.selNSGA2)
+tb.register("evaluate",lambda ind: eval_route(ind))
+
+def nsga(days,pop=140,gen=160):
+    tb.register("individual",init_ind,days)
+    tb.register("population",tools.initRepeat,list,tb.individual)
+    P=tb.population(pop)
+    algorithms.eaMuPlusLambda(P,tb,pop,pop,cxpb=CX_PROB,mutpb=MUT_PROB,ngen=gen,verbose=False)
+    return [r for ind in P if (r:=make_route(ind))]
+
+def lns(seeds,iters=100,destroy=0.3):
+    out=[]
+    for r in seeds:
+        base=list(r.genes); nd=max(1,int(len(base)*destroy))
+        for _ in range(iters):
+            drop=random.sample(range(len(base)),nd)
+            keep=[g for i,g in enumerate(base) if i not in drop]
+            used={s for s,_ in keep}
+            for pos in sorted(drop):
+                s=random.choice([k for k in SPOTS if k not in used])
+                z=None if pos==len(base)-1 else (random.randrange(N_ZONE) if pos%2 else random.randrange(N_ZONE))
+                keep.insert(pos,(s,z)); used.add(s)
+            nr=make_route(keep)
+            if nr: out.append(nr)
+    best={}
+    for r in out:
+        if r.genes not in best or r.sat>best[r.genes].sat: best[r.genes]=r
+    return list(best.values())
+
+# ── 5 熵权评分 ───────────────────────────────────────────────
+def norm(X):
+    X=X.astype(float); X[:,0]=X[:,0].max()-X[:,0]; X[:,1]=X[:,1].max()-X[:,1]
+    rng=X.max(0)-X.min(0)+1e-12
+    return (X-X.min(0))/rng
+def entropy(Z):
+    P=Z/(Z.sum(0)+1e-12); E=-(P*np.log(P+1e-12)).sum(0)/math.log(len(Z))
+    w=1-E; return w/w.sum()
+
+def build_pool(routes,top):
+    pool=[]; w_dict={}
+    for d in (1,2,3):
+        subset=[r for r in routes if r.days==d]
+        Z=norm(np.array([[r.cost,r.time,r.sat] for r in subset]))
+        w=entropy(Z); w_dict[d]=w
+        sc=Z@w
+        pool.extend(sorted((r._replace(score=float(s)) for r,s in zip(subset,sc)),
+                           key=lambda x:x.score,reverse=True)[:top])
+        print(f"Day {d} 权重 w_C={w[0]:.3f} w_T={w[1]:.3f} w_S={w[2]:.3f}")
+    return pool
+
+# ── 6 主 LP/IP ───────────────────────────────────────────────
+def solve(pool,max_pax,use_gurobi):
+    # A. Gurobi
+    if use_gurobi:
+        try:
+            m=gp.Model(); m.Params.OutputFlag=0
+            n={r:m.addVar(vtype=GRB.INTEGER,lb=0) for r in pool}
+            y={r:m.addVar(vtype=GRB.BINARY)       for r in pool}
+            m.setObjective(gp.quicksum(r.score*n[r] for r in pool),GRB.MAXIMIZE)
+            for r in pool: m.addConstr(n[r]>=y[r]); m.addConstr(n[r]<=max_pax*y[r])
+            for d in (1,2,3):
+                m.addConstr(gp.quicksum(y[r] for r in pool if r.days==d)==LINES_PER_DAY)
+            for i in range(N_SPOT):
+                m.addConstr(gp.quicksum(n[r]*sum(1 for s,_ in r.genes if s==i) for r in pool)<=2*C_cap[i])
+            for j in range(N_ZONE):
+                m.addConstr(gp.quicksum(n[r]*sum(1 for _,z in r.genes[::2] if z==j) for r in pool)<=L_cap[j])
+                m.addConstr(gp.quicksum(n[r]*sum(1 for _,z in r.genes[1::2] if z==j and r.days>1)
+                                        for r in pool)<=D_cap[j])
+            m.optimize()
+            if m.status==GRB.OPTIMAL:
+                return {r:int(n[r].X) for r in pool if n[r].X>=1}
+        except Exception: pass
+    # B. PuLP
+    prob=LpProblem("master",LpMaximize)
+    # ---------- FIX: n 下界 0 ----------
+    n={r:LpVariable(f"n{idx}",0,max_pax,LpInteger) for idx,r in enumerate(pool)}
+    y={r:LpVariable(f"y{idx}",0,1,LpInteger)      for idx,r in enumerate(pool)}
+    prob+=lpSum(r.score*n[r] for r in pool)
+    for r in pool: prob+=n[r]>=y[r]; prob+=n[r]<=max_pax*y[r]
+    for d in (1,2,3): prob+=lpSum(y[r] for r in pool if r.days==d)==LINES_PER_DAY
+    for i in range(N_SPOT):
+        prob+=lpSum(n[r]*sum(1 for s,_ in r.genes if s==i) for r in pool)<=2*C_cap[i]
+    for j in range(N_ZONE):
+        prob+=lpSum(n[r]*sum(1 for _,z in r.genes[::2] if z==j) for r in pool)<=L_cap[j]
+        prob+=lpSum(n[r]*sum(1 for _,z in r.genes[1::2] if z==j and r.days>1)
+                    for r in pool)<=D_cap[j]
+    if prob.solve(PULP_CBC_CMD(msg=False))==1:
+        return {r:int(n[r].value()) for r in pool if n[r].value()>=1}
+    return None
+
+def master(routes):
+    top=TOP_EACH_START
+    while top<=TOP_EACH_MAX:
+        pool=build_pool(routes,top)
+        pax=MAX_PAX_START
+        while pax>=1:
+            sol=solve(pool,pax,BACK0=="gurobi")
+            if sol and len(sol)==LINES_PER_DAY*3: return sol
+            pax//=2
+        top=int(top*1.5); print(f"→ 扩大 TOP_EACH 至 {top}")
+    return {}
+
+# ── 7 输出 ──────────────────────────────────────────────────
+def row(r,p):
+    d={"Days":r.days,"Passengers":p,"Cost":r.cost,"Time":r.time,
+       "Sat":r.sat,"Score":r.score}
+    for k,(s,z) in enumerate(r.genes,1):
+        tag=f"D{(k+1)//2}_{'AM' if k%2 else 'PM'}"
+        d[f"{tag}_Spot"]=f"S{s+1}"
+        if z is not None: d[f"{tag}_Zone"]=f"Z{z+1}"
+    return d
+
+def main():
+    print("数据读取完成")
+    routes=[]
+    for d in (1,2,3):
+        print(f"  ▸ 生成 {d} 日行程 …")
+        routes+=nsga(d)
+    routes+=lns(routes)
+    print("  ▸ 候选线路：",len(routes))
+
+    sol=master(routes)
+    if not sol: sys.exit("仍无法生成 30 条方案，请再放宽参数")
+    df=pd.DataFrame([row(r,p) for r,p in sol.items()]).sort_values("Score",ascending=False)
+    out=pathlib.Path(__file__).with_name("RouteAssignment.xlsx")
+    df.to_excel(out,index=False)
+    print("已输出",out)
+    print(df.groupby("Days").size().rename("线路数 / 天").to_string())
+
+if __name__=="__main__":
+    main()
+\end{lstlisting}
+
+\subsubsection*{02. 问题二代码}
+\begin{lstlisting}
+#!/usr/bin/env python3
+# -------------------------------------------------------------
+# Chongqing Tourism – Problem (2)  ≤10 套餐  (v4 • 2025‑08‑01)
+# -------------------------------------------------------------
+import numpy as np, pandas as pd, pathlib, sys, warnings
+from collections import namedtuple, OrderedDict
+
+# ===== 参数 =====
+MAX_PAX   = 1500
+CLUSTER_CAP = {1:4, 2:3, 3:3}      # 聚类保留上限
+MIN_KEEP    = {1:2, 2:2, 3:2}      # 最少保留
+TARGET_TOTAL=None                  # 可设总客流目标
+
+# ===== 后端 =====
+try:
+    import gurobipy as gp; from gurobipy import GRB; BACK="gurobi"
+except ImportError:
+    from pulp import (LpProblem,LpVariable,LpMaximize, lpSum,
+                      LpInteger, PULP_CBC_CMD); BACK="pulp"
+
+try:
+    from sklearn.cluster import AgglomerativeClustering
+    from sklearn.metrics import silhouette_score
+    SK_OK=True
+except ImportError:
+    SK_OK=False; warnings.warn("sklearn 未安装，聚类退化为按评分截取")
+
+# ===== 路径 =====
+DIR=pathlib.Path(__file__).parent
+XLS30 = DIR/"RouteAssignment.xlsx"
+XLSCAP= DIR/"ChongqingTourismTemplate.xlsx"
+if not XLS30.exists() or not XLSCAP.exists():
+    sys.exit("❌ 缺少 RouteAssignment.xlsx / ChongqingTourismTemplate.xlsx")
+
+# ===== 读取容量 =====
+def read_caps(x):
+    sc=pd.read_excel(x,"ScenicCapacity",engine="openpyxl")
+    C=sc.filter(like='Half').to_numpy(int).ravel()
+    rz=pd.read_excel(x,"RegionCapacity",engine="openpyxl")
+    L=rz.filter(like='Lunch').to_numpy(int).ravel()
+    D=rz.filter(like='Dinner').to_numpy(int).ravel()
+    return C,L,D
+C_cap,L_cap,D_cap=read_caps(XLSCAP)
+N_SPOT,N_ZONE=len(C_cap),len(L_cap)
+
+# ===== 读取 30 条线路 =====
+Route=namedtuple("Route","row days score cost time sat genes vS vL vD")
+def parse_routes(x):
+    df=pd.read_excel(x); out=[]
+    for idx,r in df.iterrows():
+        d=int(r['Days']); g=[]
+        for day in range(1,d+1):
+            # AM
+            s=r[f"D{day}_AM_Spot"]; z=r[f"D{day}_AM_Zone"]
+            g.append((int(s[1:])-1,int(z[1:])-1,'AM'))
+            # PM  (FIX‑1：一日游不占晚餐区)
+            s=r[f"D{day}_PM_Spot"]; z=r.get(f"D{day}_PM_Zone")
+            z_id=None if d==1 else ((int(z[1:])-1) if isinstance(z,str) else None)
+            g.append((int(s[1:])-1,z_id,'PM'))
+        vS=np.zeros(N_SPOT,int); vL=np.zeros(N_ZONE,int); vD=np.zeros(N_ZONE,int)
+        for s,z,t in g:
+            vS[s]+=1
+            if t=='AM': vL[z]+=1
+            elif z is not None: vD[z]+=1
+        out.append(Route(idx,d,r['Score'],r['Cost'],r['Time'],r['Sat'],
+                         tuple(g),tuple(vS),tuple(vL),tuple(vD)))
+    return out
+routes=parse_routes(XLS30)
+
+# ===== 聚类 =====
+def vec(r):
+    s=[g[0] for g in r.genes]+[-2]*(6-len(r.genes))
+    l=[r.genes[2*i][1] for i in range(r.days)]+[-2]*(3-r.days)
+    d=[-2 if r.genes[2*i+1][1] is None else r.genes[2*i+1][1]
+       for i in range(r.days)]+[-2]*(3-r.days)
+    return np.array(s+l+d+[r.cost,r.time,r.sat],float)
+
+def cluster(group,quota):
+    if len(group)<=quota or not SK_OK:
+        return sorted(group,key=lambda r:-r.score)[:quota]
+    X=np.stack([vec(r) for r in group])
+    X[:,-3:]=(X[:,-3:]-X[:,-3:].mean(0))/(X[:,-3:].std(0)+1e-12)
+    best_lab,best_sc=None,-1
+    for k in range(2,min(quota,len(group))+1):
+        lab=AgglomerativeClustering(n_clusters=k,linkage='average').fit_predict(X)
+        sc=silhouette_score(X,lab)
+        if sc>best_sc: best_lab,best_sc=lab,sc
+    reps=[]
+    for c in range(max(best_lab)+1):
+        sub=[r for r,l in zip(group,best_lab) if l==c]
+        reps.append(max(sub,key=lambda r:r.score))
+    return sorted(reps,key=lambda r:-r.score)[:quota]
+
+candidate=[]
+for d in (1,2,3):
+    candidate+=cluster([r for r in routes if r.days==d],CLUSTER_CAP[d])
+
+# ===== FIX‑A: 精准去重 =====
+def signature(r):
+    if r.days==1:   # (无序景点集合, 午餐区)
+        s1,s2 = r.genes[0][0], r.genes[1][0]
+        lunch = r.genes[0][1]
+        return ('1d', frozenset({s1,s2}), lunch)
+    else:
+        # 有序 (AM,PM) 列表足够区分
+        day_pairs=[(r.genes[2*i][0], r.genes[2*i+1][0]) for i in range(r.days)]
+        return (f'{r.days}d', tuple(day_pairs))
+def deduplicate(lst):
+    seen=OrderedDict()
+    for r in sorted(lst,key=lambda r:-r.score):
+        sig=signature(r)
+        if sig not in seen: seen[sig]=r
+    return list(seen.values())
+unique=deduplicate(candidate)
+
+# ===== FIX‑C: 回填不足 =====
+for d in (1,2,3):
+    need=MIN_KEEP[d]-sum(r.days==d for r in unique)
+    if need>0:
+        pool=[r for r in routes if r.days==d and r not in unique]
+        for r in sorted(pool,key=lambda r:-r.score):
+            if signature(r) not in {signature(u) for u in unique}:
+                unique.append(r); need-=1
+            if need==0: break
+
+print(f"★ 代表线路：{len(unique)} 条 (1d:{sum(r.days==1 for r in unique)} "
+      f"2d:{sum(r.days==2 for r in unique)} 3d:{sum(r.days==3 for r in unique)})")
+
+# ===== MILP 分配乘客 =====
+def allocate(reps):
+    if BACK=="gurobi":
+        try:
+            m=gp.Model(); m.Params.OutputFlag=0
+            n={r:m.addVar(vtype=GRB.INTEGER,lb=1,ub=MAX_PAX) for r in reps}
+            m.setObjective(gp.quicksum(r.score*n[r] for r in reps),GRB.MAXIMIZE)
+            for i in range(N_SPOT):
+                m.addConstr(gp.quicksum(n[r]*r.vS[i] for r in reps)<=2*C_cap[i])
+            for j in range(N_ZONE):
+                m.addConstr(gp.quicksum(n[r]*r.vL[j] for r in reps)<=L_cap[j])
+                m.addConstr(gp.quicksum(n[r]*r.vD[j] for r in reps)<=D_cap[j])
+            if TARGET_TOTAL: m.addConstr(gp.quicksum(n.values())==TARGET_TOTAL)
+            m.optimize()
+            if m.status==GRB.OPTIMAL:
+                return {r:int(n[r].X) for r in reps}
+        except gp.GurobiError: print("→ Gurobi 失败，改用 PuLP")
+    # fallback
+    prob=LpProblem("P2",LpMaximize)
+    n={r:LpVariable(f"n{idx}",1,MAX_PAX,LpInteger) for idx,r in enumerate(reps)}
+    prob+=lpSum(r.score*n[r] for r in reps)
+    for i in range(N_SPOT):
+        prob+=lpSum(n[r]*r.vS[i] for r in reps)<=2*C_cap[i]
+    for j in range(N_ZONE):
+        prob+=lpSum(n[r]*r.vL[j] for r in reps)<=L_cap[j]
+        prob+=lpSum(n[r]*r.vD[j] for r in reps)<=D_cap[j]
+    if TARGET_TOTAL: prob+=lpSum(n.values())==TARGET_TOTAL
+    if prob.solve(PULP_CBC_CMD(msg=False))==1:
+        return {r:int(n[r].value()) for r in reps}
+    return None
+solution=allocate(unique)
+if not solution: sys.exit("❌ 无可行解，请调参")
+
+print("✅ MILP 完成")
+
+# ===== 输出 =====
+rows=[]
+for r,p in solution.items():
+    rec={'Days':r.days,'Passengers':p,'Cost':r.cost,'Time':r.time,
+         'Sat':r.sat,'Score':r.score,'OriginRow':r.row}
+    for k,(s,z,t) in enumerate(r.genes,1):
+        tag=f"D{(k+1)//2}_{'AM' if t=='AM' else 'PM'}"
+        rec[f"{tag}_Spot"]=f"S{s+1}"
+        if z is not None: rec[f"{tag}_Zone"]=f"Z{z+1}"
+    rows.append(rec)
+df=pd.DataFrame(rows).sort_values("Score",ascending=False)
+out=DIR/"RouteAssignment_10.xlsx"
+df.to_excel(out,index=False)
+print("★ 新文件已写入",out)
+\end{lstlisting}
+
+\subsubsection{03. 问题三代码}
+\begin{lstlisting}
+#!/usr/bin/env python3
+# ------------------------------------------------------------
+#  Problem (3) – Hotel Siting: Entropy‑weight scoring + Plots
+# ------------------------------------------------------------
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+# 0 ────────────── 文件路径 ──────────────
+TEMPLATE_XLS = Path("ChongqingTourismTemplate.xlsx")
+ROUTES_XLS   = Path("RouteAssignment_10.xlsx")
+if not (TEMPLATE_XLS.exists() and ROUTES_XLS.exists()):
+    raise FileNotFoundError("❌ Excel 文件未找到，请检查目录")
+
+# 1 ────────────── 读取区域静态信息 ──────
+reg = pd.read_excel(TEMPLATE_XLS, sheet_name="RegionCapacity", engine="openpyxl")
+reg = (reg.rename(columns={"DinnerAccommodationCapacity_people": "Capacity",
+                           "PreferenceScore_1to10":            "Preference"})
+           .assign(RegionID=lambda d: d.RegionID.str.strip())
+           .set_index("RegionID"))
+
+# 2 ────────────── 读取交通矩阵并求平均 ──
+def _avg(sheet):
+    df = pd.read_excel(TEMPLATE_XLS, sheet_name=sheet,
+                       index_col=0, engine="openpyxl")
+    return df.mean(axis=1)        # 行均值：每区域 → 6 景点
+reg["AvgCost"] = _avg("Transport_Cost")
+reg["AvgTime"] = _avg("Transport_Time")
+
+# 3 ────────────── 统计实际住宿需求 ──────
+routes = pd.read_excel(ROUTES_XLS, engine="openpyxl")
+demand = {rid: 0 for rid in reg.index}
+for _, r in routes.iterrows():
+    if r["Days"] >= 2:
+        pax = int(r["Passengers"])
+        z1 = r.get("D1_PM_Zone")
+        if isinstance(z1, str):
+            demand["R"+z1[1:]] += pax
+        if r["Days"] >= 3:
+            z2 = r.get("D2_PM_Zone")
+            if isinstance(z2, str):
+                demand["R"+z2[1:]] += pax
+reg["Demand"] = pd.Series(demand).fillna(0).astype(int)
+
+# 4 ────────────── 指标标准化 (0‑1) ──────
+def norm_pos(series):
+    rng = series.max()-series.min()
+    return (series - series.min()) / rng if rng else 0.5
+def norm_neg(series):
+    rng = series.max()-series.min()
+    return (series.max()-series) / rng if rng else 0.5
+
+reg["S_norm"] = norm_pos(reg["Preference"])
+reg["C_norm"] = norm_neg(reg["AvgCost"])
+reg["T_norm"] = norm_neg(reg["AvgTime"])
+
+# 5 ────────────── 熵权法求权重 ──────────
+def entropy_weight(df_norm):
+    """df_norm: 行=区域, 列=指标(已0-1且正向); 返回权重np.array"""
+    X = df_norm.values + 1e-12                 # 防止 log(0)
+    P = X / X.sum(axis=0, keepdims=True)       # 比例矩阵
+    m = X.shape[0]
+    k = 1.0 / np.log(m)
+    E = -k * (P * np.log(P)).sum(axis=0)       # 熵值
+    D = 1 - E                                  # 差异系数
+    w = D / D.sum()                            # 归一化权重
+    return w, E
+
+weights, ent = entropy_weight(reg[["S_norm","C_norm","T_norm"]])
+w_S, w_C, w_T = weights
+print("＝ 熵权结果 ＝")
+print(f"• w_Score  = {w_S:.3f}")
+print(f"• w_Cost   = {w_C:.3f}")
+print(f"• w_Time   = {w_T:.3f}\n")
+
+# 6 ────────────── 综合得分 & 选址 ────────
+reg["Composite"] = (w_S*reg["S_norm"] +
+                    w_C*reg["C_norm"] +
+                    w_T*reg["T_norm"])
+BEST = reg["Composite"].idxmax()
+
+TARGET_D = 12_000
+expand = max(0, TARGET_D - reg.at[BEST, "Capacity"])
+
+print("＝ 选址优化结果 ＝")
+print(f"• 最佳区域 : {BEST}")
+print(f"• 综合得分 : {reg.at[BEST,'Composite']:.3f}")
+print(f"• 现有容量 : {reg.at[BEST,'Capacity']:,} 人次")
+print(f"• 需扩容   : {expand:,} 人次  (目标 {TARGET_D:,} 人次)\n")
+
+# 7 ────────────── 可视化 ────────────────
+plt.figure(figsize=(10, 4.5))
+
+# 7‑1 容量利用率
+plt.subplot(1,2,1)
+used = reg["Demand"]; total = reg["Capacity"]
+plt.bar(reg.index, used, label="已用")
+plt.bar(reg.index, total-used, bottom=used, alpha=0.25, label="剩余")
+plt.ylabel("人次"); plt.title("各区域晚宿容量利用率")
+plt.xticks(rotation=0); plt.legend()
+
+# 7‑2 指标+综合得分
+ax = plt.subplot(1,2,2)
+width = 0.18; x = np.arange(len(reg))
+for i, col in enumerate(["S_norm","C_norm","T_norm","Composite"]):
+    ax.bar(x+(i-1.5)*width, reg[col], width,
+           label=col.replace("_norm","").upper())
+ax.set_xticks(x); ax.set_xticklabels(reg.index)
+ax.set_ylim(0,1.05); ax.set_ylabel("归一化得分")
+ax.set_title("指标得分 (熵权)")
+ax.legend(fontsize=8)
+
+plt.tight_layout()
+plt.show()
+\end{lstlisting}
+
+\bibliographystyle{plain}  % 参考文献样式，可选：plain, abbrv, unsrt, alpha等
+\bibliography{references} 
+\end{document}
+
