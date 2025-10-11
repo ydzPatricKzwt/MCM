@@ -1,0 +1,323 @@
+\documentclass[utf8,12pt]{ctexart} 
+%-------------------------以下是引言区----------可以理解成导包、设置参数的地方-------------
+%\documentclass[utf8]{ctexart} %中文文档类
+\newcommand{\mytitle}[1]{{\large\bfseries\fontsize{16}{16}\selectfont #1}}
+% 题目标题在下面写！题目在下面写！
+% 三号黑体标题
+\title{\mytitle{\heiti \zihao{3} \vspace{-2cm} 最佳NIPT时点选择与胎儿异常判定 }}   
+
+\author{}
+\date{}
+
+\pagestyle{plain}
+\usepackage{paralist} %调整无序列表行距
+%\noindent  %单段取消自动缩进
+%\usepackage{indentfirst} % 首行缩进
+%字体基本操作    
+%粗体：\textbf{jiacu}\textbf{}
+%\usepackage{xeCJK}
+\usepackage{enumitem}
+%字体调整
+% timenewroman
+%\usepackage{times}   
+%上面这个包中可以使用中文字体，如：\heiti、 \kaishu
+\usepackage{lipsum}
+%下面这个包用来设置字体的大小
+\usepackage{type1cm}
+%使用四级标题
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+
+%标题设置  如果比赛对标题字号、标题居左有要求，就用下面这段设置标题格式的代码，没有的话就注释掉
+%\iffalse
+\ctexset{
+    % 修改 section。
+    section={   
+        name={,、},
+        number={\chinese{section}}, % 中文的一二三
+        format=\heiti \zihao{-3}, % 设置 section 标题为黑体、右对齐、小3号字，需要左对齐就增加\raggedright
+        %aftername=\hspace{0pt},
+        beforeskip=1ex,
+        afterskip=1ex
+    },
+    % 修改 subsection。
+    subsection={   
+        %name={,.},
+        %number={\arabic{subsection}},
+        format=\heiti\zihao{-4}, % 设置 subsection 标题为黑体、xiaosi号字
+        %aftername=\hspace{0pt},
+        beforeskip=1ex,
+        afterskip=1ex
+    },
+        subsubsection={   
+            %name={,.},
+            %number={\arabic{subsection}},
+            format=\heiti\zihao{-4}, % 设置 subsection 标题为黑体、xiaosi号字
+            %aftername=\hspace{0pt},
+            beforeskip=1ex,
+            afterskip=1ex
+        }
+}
+%\fi
+
+
+%公式调整包
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+%目录自动跳转
+\usepackage{hyperref}
+
+%\usepackage[fontsize=14pt]{fontsize}
+\usepackage{geometry}%调整页边距
+\geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+%封面页页边距
+%\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{ctex}%引入中文包
+%\usepackage{xeCJK}
+%\setCJKmainfont{songti}
+
+%使用特殊字符
+\usepackage{wasysym}
+
+
+%引入表格制作包
+%\renewcommand\arraystretch{1.3}  这个命令是用来修改行高的
+\usepackage{caption}
+\usepackage{tabularray}
+\usepackage{booktabs}
+\usepackage{diagbox} %单格双字
+\usepackage{amsmath}
+\usepackage{verbatimbox}  %调整表格与正文间距
+\usepackage{pdfpages}
+\usepackage{multirow}
+\usepackage{array} %调整表格行高
+\usepackage{longtable}
+
+\captionsetup[table]{labelsep=space} % 表
+\captionsetup[figure]{labelsep=space} % 图  
+\captionsetup{font={small}}  %表名字体大小
+%\usepackage[font=small,labelfont=bf,labelsep=none]{caption}
+
+
+
+\usepackage{setspace}%使用间距宏包
+%\linespread{1.625}%将行距调整成word里面的1.5杯
+
+%调整摘要的样式,调整的命令必须要放到引言区，不然无效
+\usepackage{abstract}
+%\renewcommand{\abstractnamefont}{\large\bfseries}
+%\renewcommand{\abstractname}{\zihao{-4}\large 摘要\\}
+% 小三 黑体
+\renewcommand{\abstractname}{\fontsize{15pt}{22pt}\heiti 摘要\\}
+
+%用于调整图片的包
+\usepackage{graphicx}\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{float} %设置图片浮动位置的宏包
+\usepackage{subfig}%放置子图
+
+\usepackage{indentfirst} %段前缩进包
+
+
+\usepackage{setspace}%局部修改行距包
+
+%附录
+\usepackage{appendix}% 附录
+\usepackage{xcolor} %代码高亮包
+\usepackage{listings,matlab-prettifier} 
+
+%打印代码
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+%\definecolor{backcolour}{rgb}{0.95,0.198,0.120}
+\definecolor{backcolour}{RGB}{	245 ,245, 245}
+
+%设置第一种代码高亮样式
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=4pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+% 设置matlab代码高亮样式
+\lstset{style=mystyle}
+\lstdefinestyle{matlab}{
+    language=Matlab,                       % MATLAB as the language
+    backgroundcolor=\color{white},         % Background color
+    commentstyle=\color{gray},             % Comment style
+    keywordstyle=\color{blue},             % Keyword style
+    numberstyle=\tiny\color{gray},         % Line number style
+    stringstyle=\color{magenta},           % String literal style
+    basicstyle=\footnotesize\ttfamily,     % Default code style
+    breakatwhitespace=false,               % Don't break lines automatically
+    breaklines=true,                       % Wrap long lines
+    captionpos=b,                          % Position of the caption
+    keepspaces=true,                       % Keep spaces in the code, useful for indenting
+    numbers=left,                          % Line numbers on the left
+    numbersep=5pt,                         % Distance of line numbers from code
+    showspaces=false,                      % Show spaces with underscores
+    showstringspaces=false,                % Don't show spaces in strings
+    showtabs=false,                        % Don't show tabs within strings
+    tabsize=4                              % Tab size
+}
+
+%代码黑框，不好看
+\usepackage{mdframed}
+%另一种代码黑框，更好看
+\usepackage{tcolorbox}
+\tcbuselibrary{listings,skins}
+
+\usepackage{cite}
+%----------------------------------引言区设置结束------------------------------------------------
+%如果有特殊的封面页要放，麻烦使用wps插入一页
+
+
+\begin{document}
+	%制作摘要
+	\maketitle
+	\vspace{-2.5cm}
+    %\renewcommand{\abstractname}{\large 摘要\\}
+    % \renewcommand{\abstractname}{\zihao{-4}\large 摘要\\}
+    \setlength{\absleftindent}{0pt}
+    \setlength{\absrightindent}{0pt}  %清楚自动缩进
+    
+ %   \newgeometry
+ 
+	\begin{abstract}%摘要
+
+无创产前检测（NIPT）是一种通过检测胎儿游离 DNA 片段来筛查胎儿染色体异常的重要技术。本文基于多时点随访数据构建了一个统一且可加权的建模与决策框架。
+
+针对问题一，为了量化 Y 染色体与孕周数、BMI 等指标的关系，本文先利用\textbf{聚类自助法}稳健计算出加权 spearman 相关系数初步了解相关性，随后结合\textbf{ GAMM 与 LMM }建立 Y 染色体浓度与孕周和 BMI 的函数关系。结果显示，Y 染色体浓度与孕周为\textbf{显著正相关}（系数 0.10），与 BMI 为\textbf{显著负相关}（系数 -0.17），GAMM 相比 LMM 对数似然显著提升，AIC 从 793.11 降至 755.96，说明\textbf{非线性项}的必要性。
+
+针对问题二，为了降低孕妇潜在风险，本文首先采用线性插值和问题1 得到的 GAMM 模型估计出孕妇的\textbf{首次达标时间 $T_i$}，随后在 BMI 轴上，以\textbf{最小化段内代价}为目标建立\textbf{动态规划}模型分段，并用 BIC 自动选择最优组数 $K^*$，在每个 BMI 组内，对 $T_i$ 近似出\textbf{首检达标曲线}，定义\textbf{预期风险函数 $R_g(t)$}，再以 $R_g(t)$ 最小化为目标得到该组的\textbf{最优时点 $t^∗_g$}。考虑检测误差时，引入误差修正达标率，并重复优化得到\textbf{ $t^*_{g,err}$}。最终，将BMI区间分为6组，分别约为[ 20.7, 29.1]，[ 29.1, 30.1]，[ 30.1,31.2]，[ 31.2, 32.6]，[ 32.6, 33.4]，[ 33.5, 46.9]，为各组修正后的最佳NIPT时点分别为15.9周，18.3周，14.3周，16.0周，14.8周，19.1周。
+
+针对问题三，为了在考虑\textbf{多种因素}的情况下使孕妇风险最小，本文在原来的 GAMM 模型基础上加入年龄和相对 BMI \textbf{正交变化}后的身高与体重，据此计算出达标曲线 $F_i(t)$，接着在 BMI 升序上做DP动态规划分段，并以在每段上“原始成本+结构惩罚”的风险最小为目标求出每组的最佳时点。最终，本文得到BMI最优分组数为3组，区间分别约为[20.7, 30.6], [30.7,31.3],[31.3,46.9],每组的最佳 NIPT 时点分别为 15.5周，16.25周,17.75周。
+
+针对问题四，为了构建高精度的女胎异常判定模型，本文建立分组感知（按孕妇）+ 加权（\( \omega_q \)）的\textbf{梯度提升决策树分类模型}，联合\textbf{多路重采样}处理极端不平衡，对预处理后的 552 条数进行了系统的特征工程、采样处理和参数优化，采用\textbf{ 5 折交叉验证}评估模型性能，最终在 smoteenn 采样下，在测试集上取得召回率 97.59\%，F1 分数 93.61\%，AUC = 0.9742，精确率 89.95\% 的优异性能，在女胎异常判定上显著优于其他处理方法。
+
+\textbf{关键词：}NIPT \quad 加权混合效应模型 \quad GAMM \quad 动态规划 \quad 累计达标曲线
+
+    \end{abstract}	
+	
+	
+	
+	\newpage  %新开一页
+	
+	
+	{\centering\section{问题的重述}}
+	%\fontsize{12pt}{12pt}\selectfont
+    \input{1chongshu} 
+
+
+	{\centering\section{问题分析}}
+	%\fontsize{12pt}{12pt}\selectfont
+    \input{2fenxi}
+    
+	{\centering\section{模型的假设}}
+	%\fontsize{12pt}{12pt}\selectfont
+	
+		%\begin{spacing}{0.9}
+			% 局部调整行距  这里是0.9倍行距
+    \input{3jiashe}
+
+    \newpage
+
+    {\centering\section{符号说明$^{[9]}$}}
+    \input{4fuhao}
+
+
+    \newpage
+    {\centering\section{数据预处理与分析}}
+    \input{5.0yuchuli}
+
+ 
+	{\centering\section{模型的建立与求解}}
+	\fontsize{12pt}{12pt}\selectfont
+
+    \subsection{问题一模型建立与求解}
+    \input{5.1.1}
+
+    \subsection{问题二模型建立与求解}
+    \input{5.2.1}
+    
+\newpage
+    \subsection{问题三模型建立与求解}
+    \input{5.3.1}
+
+    \subsection{问题四模型建立与求解}
+    \input{5.4.1}
+    %{\centering\section{灵敏度分析}}
+    %\input{6lingmindu}
+\newpage
+    {\centering\section{模型的评价与推广}}
+
+\subsection{模型的优点}
+\begin{compactitem}
+    \item 数据层的稳健性处理：提出“软门控+质量分数”机制，对读段数、比对率、重复率、过滤比例、整体 GC 与 $\Delta$GC 多维指标进行柔性判定，并以几何平均（读段/比对加信权重）生成连续型质量权重；同孕妇同日仅保留“质量最好”的记录，降低重复与测序噪声带来的偏倚。
+    \item 构建“带权 Spearman $\to$ 簇自助法”流程，既能兼顾样本权重，又能按“孕妇”为簇进行有放回重抽估计标准误与置信区间，稳健检验孕周/BMI 与 Y 浓度的单调相关性。
+    \item 动态规划分段：以动态规划最小化“分段内风险 + 结构惩罚”的总准则，既自动确定组数与边界，又联动各组 $t \textbackslash t^*$；输出每组的规模、BMI 界、一次达标率与重测率等直观总结。
+    \item 女胎异常判定的完整流水线：自动特征筛选与中位数插补、标准化；按“孕妇 ID”进行分组切分与 GroupKFold 交叉验证防止信息泄漏；结合随机过/欠采与 SMOTE/SMOTEENN 等缓解类别失衡；评估指标覆盖 AUC、F1、召回、MCC、特异性等。
+\end{compactitem}
+
+\subsection{模型的缺点}
+\begin{compactitem}
+    \item GAMM 对初始值敏感，易陷入局部最优。
+    \item 类别失衡与合成样本偏差：重采样（如 SMOTE/SMOTEENN）虽提高召回，但可能改变真实分布并引入合成噪声。
+    \item 可解释性有限：女胎判定主要采用树集成（GBDT/AdaBoost），虽然性能稳健，但机制解释不如参数模型直观。
+\end{compactitem}
+
+\subsection{模型的推广}
+\begin{compactitem}
+    \item 检测质量权重的数据驱动学习：在现有“阶段权重 + 体重指数调节”的基础上，引入真实复检成本、随访结局等信息，学习权重与惩罚强度；同时对“阶段积分索引”进行整体校准，使风险度量更贴近实际。
+    \item 与生存/时间到事件方法衔接：把“首次达标”视作事件，采用离散时间危险率或加速失效时间模型，替代单一阈值穿越法，更好处理不规则观测与删失；据此将风险函数改写为基于事件概率的临床效用。
+    \item 女胎判定的工程化与可解释化：在“分组交叉验证 + 重采样 + 网格搜索”框架上，补充阈值优化与概率校准（如对数几率回归校准、等温回归校准）；结合特征重要性与基于博弈论的贡献分解等工具，提升可解释性与阈值落地性。
+\end{compactitem}
+\newpage
+
+    {\centering\section*{参考文献}}
+
+\begin{enumerate}[label={[\arabic*]}, leftmargin=*]
+    \item Zhang R, Zhang H, Li Y, et al. External quality assessment for detection of fetal trisomy 21, 18, and 13 by massively parallel sequencing in clinical laboratories[J]. The Journal of Molecular Diagnostics, 2016, 18(2): 244-252.
+    
+    \item 蓝志衡.DNA序列分布比率法在无创产前胎儿染色体非整倍体检测中的应用[D].华南理工大学,2020.DOI:\href{https://doi.org/10.27151/d.cnki.ghnlu.2020.005132}{10.27151/d.cnki.ghnlu.2020.005132}.
+    
+    \item 袁玉英.一种基于机器学习的无创产前筛查孕妇肿瘤的模型构建及研究[D].华南理工大学,2020.DOI:\href{https://doi.org/10.27151/d.cnki.ghnlu.2020.001545}{10.27151/d.cnki.ghnlu.2020.001545}.
+    
+    \item 郑芸芸,万陕宁,宋婷婷,等. 8594例孕妇无创DNA产前检测在胎儿染色体非整倍体疾病筛查中的临床应用[J].实用妇产科杂志,2019,35(01):68-71.
+    
+    \item 龙洋,罗艳梅,徐聚春,等. 无创DNA检测在诊断高龄孕妇胎儿非整倍体中的应用[J].实用妇产科杂志,2017,33(05):373-375.
+    
+    \item 边旭明. 胎儿染色体非整倍体的无创DNA产前检测[J].实用妇产科杂志,2013,29(05):330-333.
+    
+    \item DeepSeek, DeepSeek-V3, 深度求索(DeepSeek), 2025-09-04
+    
+    \item ChatGPT, ChatGPT5-thinking, OpenAI , 2025-09-05
+
+    \item ChatGPT, ChatGPT5-thinking, OpenAI , 2025-09-06
+
+    \item 腾讯元宝, Hunyuan, 腾讯(Tencent), 2025-09-07
+
+\end{enumerate}
+
+\newpage
+
+\input{code}
+
+\end{document}

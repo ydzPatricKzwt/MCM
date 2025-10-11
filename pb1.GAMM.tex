@@ -1,0 +1,246 @@
+\begin{lstlisting}
+
+import re, warnings
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+from scipy import stats
+from patsy import dmatrix, build_design_matrices
+import matplotlib, matplotlib.pyplot as plt
+from pathlib import Path
+
+matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial Unicode MS", "DejaVu Sans"]
+matplotlib.rcParams["axes.unicode_minus"] = False
+
+CANDIDATES = [
+    ("附件-男胎检测数据-处理.xlsx", "附件-男胎检测数据-处理"),
+    ("附件.xlsx", "男胎检测数据"),
+]
+COL_ID, COL_Y, COL_GA, COL_BMI, COL_AGE, COL_W = "孕妇代码", "Y染色体浓度", "检测孕周", "孕妇BMI", "年龄", "w_Q"
+
+out_dir = Path("./model_outputs_gamm_w"); out_dir.mkdir(parents=True, exist_ok=True)
+
+def parse_gestation_to_weeks(x):
+    if pd.isna(x): return np.nan
+    s = str(x).strip()
+    try: return float(s)
+    except: pass
+    m = re.search(r'(\d+)\s*(?:周|w|W)?\s*\+?\s*(\d+)?\s*(?:天|d|D)?', s)
+    if m:
+        w = float(m.group(1)); d = float(m.group(2)) if m.group(2) else 0.0
+        return w + d/7.0
+    m2 = re.search(r'(\d+)', s)
+    return float(m2.group(1)) if m2 else np.nan
+
+def smithson_verkuilen(y):
+    y = y.clip(0,1); n = y.notna().sum()
+    return (y*(n-1)+0.5)/n
+
+def inv_logit(z): return 1/(1+np.exp(-z))
+def AIC(llf, k): return 2*k - 2*llf
+def BIC(llf, k, n): return np.log(n)*k - 2*llf
+
+def wmean(x, w):
+    x = pd.to_numeric(x, errors="coerce"); w = pd.to_numeric(w, errors="coerce").clip(lower=0)
+    m = np.nansum(w * x) / np.nansum(w) if np.nansum(w) > 0 else np.nan
+    return m
+
+def fit_mixedlm_weighted(endog, exog, groups, weights, exog_re=None):
+    w = np.asarray(weights, dtype=float)
+    try:
+        md = sm.MixedLM(endog, exog, groups=groups, exog_re=exog_re, weights=w)
+        return md.fit(reml=False, method="lbfgs")
+    except (TypeError, ValueError):
+        print("当前 statsmodels MixedLM 不支持 weights")
+        sw = np.sqrt(np.clip(w, 1e-8, None))
+        endog_t = endog * sw
+        exog_t  = exog * sw[:, None]
+        exre_t  = exog_re * sw[:, None] if exog_re is not None else None
+        md = sm.MixedLM(endog_t, exog_t, groups=groups, exog_re=exre_t)
+        return md.fit(reml=False, method="lbfgs")
+
+def lrt(res_small, res_large, df_diff=None):
+    LR = 2*(res_large.llf - res_small.llf)
+    if df_diff is None:
+        df_diff = len(res_large.params) - len(res_small.params)
+    p = stats.chi2.sf(LR, df_diff)
+    return LR, df_diff, p
+
+#读取数据
+last_err = None
+for path, sheet in CANDIDATES:
+    try:
+        df = pd.read_excel(path, sheet_name=sheet)
+        used_path, used_sheet = path, sheet
+        break
+    except Exception as e:
+        last_err = e
+
+for c in [COL_ID, COL_Y, COL_GA, COL_BMI]:
+    if c not in df.columns:
+        raise SystemExit(f"找不到列：{c}（数据源：{used_path}/{used_sheet}）")
+if COL_W not in df.columns:
+    print("[提示] 未找到 w_Q 列，默认权重=1")
+    df[COL_W] = 1.0
+
+use_cols = [COL_ID, COL_Y, COL_GA, COL_BMI, COL_W] + ([COL_AGE] if COL_AGE in df.columns else [])
+df = df[use_cols].copy()
+df.rename(columns={COL_ID:"id", COL_Y:"Y", COL_GA:"GA_raw", COL_BMI:"BMI_raw", COL_W:"w"}, inplace=True)
+if COL_AGE in df.columns: df.rename(columns={COL_AGE:"Age_raw"}, inplace=True)
+
+# 变量转换
+df["GA"]  = df["GA_raw"].apply(parse_gestation_to_weeks)
+df["BMI"] = pd.to_numeric(df["BMI_raw"], errors="coerce")
+if "Age_raw" in df.columns: df["Age"] = pd.to_numeric(df["Age_raw"], errors="coerce")
+df["w"]   = pd.to_numeric(df["w"], errors="coerce").fillna(1.0).clip(lower=0)
+
+df = df[["id","Y","GA","BMI","w"] + (["Age"] if "Age" in df.columns else [])].dropna().copy()
+print(f"样本量：{len(df)}；孕妇个体数：{df['id'].nunique()}；有效权重和={df['w'].sum():.1f}")
+
+# SV + logit
+df["Y_star"] = smithson_verkuilen(df["Y"])
+df["logitY"] = np.log(df["Y_star"]/(1-df["Y_star"]))
+
+# 加权中心化
+GA_mu  = wmean(df["GA"],  df["w"])
+BMI_mu = wmean(df["BMI"], df["w"])
+df["GA_c"]  = df["GA"]  - GA_mu
+df["BMI_c"] = df["BMI"] - BMI_mu
+use_age = "Age" in df.columns
+if use_age:
+    Age_mu = wmean(df["Age"], df["w"])
+    df["Age_c"] = df["Age"] - Age_mu
+
+# 线性 LMM
+X_lin = pd.DataFrame({"Intercept":1.0, "GA_c":df["GA_c"], "BMI_c":df["BMI_c"]})
+if use_age: X_lin["Age_c"] = df["Age_c"]
+res_lin = fit_mixedlm_weighted(df["logitY"].values, X_lin.values, df["id"], df["w"].values)
+k_lin   = len(res_lin.params)
+aic_lin = AIC(res_lin.llf, k_lin); bic_lin = BIC(res_lin.llf, k_lin, len(df))
+print(f"[线性LMM·带权] logLik={res_lin.llf:.3f}  AIC={aic_lin:.2f}  BIC={bic_lin:.2f}")
+
+# GAMM：cr样条+随机截距
+best = None
+df_grid = [4,5,6]
+for df_ga in df_grid:
+    for df_b in df_grid:
+        formula = f"1 + cr(GA_c, df={df_ga}) + cr(BMI_c, df={df_b})" + (" + Age_c" if use_age else "")
+        try:
+            X_try = dmatrix(formula, df, return_type="dataframe")
+            res   = fit_mixedlm_weighted(df["logitY"].values, X_try.values, df["id"], df["w"].values)
+            k     = len(res.params)
+            aic   = AIC(res.llf, k); bic = BIC(res.llf, k, len(df))
+            print(f"  [GAMM·带权] df_GA={df_ga}, df_BMI={df_b}  logLik={res.llf:.3f}  AIC={aic:.2f}")
+            if (best is None) or (aic < best["aic"]):
+                best = dict(res=res, aic=aic, bic=bic, k=k, df_ga=df_ga, df_bmi=df_b,
+                            formula=formula, design_info=X_try.design_info)
+        except Exception as e:
+            print(f"  [跳过] df_GA={df_ga}, df_BMI={df_b} 收敛失败：{e}")
+
+# 退路：孕周样条+BMI 线性
+fallback = False
+if best is None:
+    fallback = True
+    for df_ga in df_grid:
+        formula = f"1 + cr(GA_c, df={df_ga}) + BMI_c" + (" + Age_c" if use_age else "")
+        try:
+            X_try = dmatrix(formula, df, return_type="dataframe")
+            res   = fit_mixedlm_weighted(df["logitY"].values, X_try.values, df["id"], df["w"].values)
+            k     = len(res.params)
+            aic   = AIC(res.llf, k); bic = BIC(res.llf, k, len(df))
+            print(f"  [GAMM-lite·带权] df_GA={df_ga}  logLik={res.llf:.3f}  AIC={aic:.2f}")
+            if (best is None) or (aic < best["aic"]):
+                best = dict(res=res, aic=aic, bic=bic, k=k, df_ga=df_ga, df_bmi=None,
+                            formula=formula, design_info=X_try.design_info)
+        except Exception as e:
+            print(f"  [跳过] GAMM-lite df_GA={df_ga} 收敛失败：{e}")
+
+if best is None:
+    raise SystemExit("所有 GAMM 设定均收敛失败，请检查数据或降低样条自由度。")
+
+res_gamm = best["res"]; design_info = best["design_info"]
+print("\n[GAMM 最优·带权] 公式:", best["formula"])
+print(f"[GAMM 最优·带权] logLik={res_gamm.llf:.3f}  AIC={best['aic']:.2f}")
+
+# LRT
+df_diff = best["k"] - k_lin
+LR, dfd, pval = lrt(res_lin, res_gamm, df_diff=df_diff)
+print(f"\n[非线性整体检验·带权] 线性LMM → GAMM：LR={LR:.3f}, df={dfd}, p={pval:.4g}")
+
+#固定效应表
+X_train = dmatrix(best["formula"], df, return_type="dataframe")
+p_fix   = X_train.shape[1]
+coef = pd.Series(res_gamm.params[:p_fix], index=[f"FE_{i}" for i in range(p_fix)], name="Estimate")
+se   = pd.Series(res_gamm.bse[:p_fix],    index=coef.index,  name="SE")
+z    = pd.Series(coef.values/se.values,   index=coef.index,  name="z")
+p    = pd.Series(2*stats.norm.sf(np.abs(z.values)), index=coef.index, name="p")
+ciL  = pd.Series(coef.values - stats.norm.ppf(0.975)*se.values, index=coef.index, name="CI_low")
+ciH  = pd.Series(coef.values + stats.norm.ppf(0.975)*se.values, index=coef.index, name="CI_high")
+pd.concat([coef,se,z,p,ciL,ciH], axis=1).to_excel(out_dir/"GAMM_coef_table_weighted.xlsx")
+
+with open(out_dir/"GAMM_model_summary_weighted.txt","w",encoding="utf-8") as f:
+    f.write(
+        f"数据源：{used_path}/{used_sheet}\n"
+        f"样本量：{len(df)}；孕妇数：{df['id'].nunique()}；权重和：{df['w'].sum():.1f}\n"
+        f"线性LMM·带权：logLik={res_lin.llf:.3f}, AIC={aic_lin:.2f}\n"
+        f"GAMM最优·带权：{best['formula']}\n"
+        f"logLik={res_gamm.llf:.3f}, AIC={best['aic']:.2f}\n"
+        f"LRT(线性→GAMM)：LR={LR:.3f}, df={dfd}, p={pval:.4g}\n"
+        f"说明：{'退路模型（孕周样条+BMI线性）' if fallback else '二维样条（孕周+BMI）'}\n"
+    )
+
+#部分效应图
+def partial_plot(var_name, x_grid, GA_med, BMI_med, Age_med=None, title="", fn="plot.png"):
+    new = pd.DataFrame({
+        "GA_c":  np.repeat(GA_med, len(x_grid)),
+        "BMI_c": np.repeat(BMI_med, len(x_grid))
+    })
+    new[var_name] = x_grid
+    if use_age: new["Age_c"] = Age_med
+    X_new = build_design_matrices([design_info], new)[0]
+    X_new = np.asarray(X_new)
+    beta = res_gamm.params[:p_fix]
+    cov  = res_gamm.cov_params()[:p_fix, :p_fix]
+    lin      = X_new @ beta
+    var_lin  = np.einsum("ij,jk,ik->i", X_new, cov, X_new)
+    se_lin   = np.sqrt(np.maximum(var_lin, 0))
+    zcrit    = stats.norm.ppf(0.975)
+    lo_prob  = inv_logit(lin - zcrit*se_lin)
+    hi_prob  = inv_logit(lin + zcrit*se_lin)
+    y_prob   = inv_logit(lin)
+    plt.figure(figsize=(7,5))
+    if var_name == "GA_c":
+        x_axis = x_grid + wmean(df["GA"], df["w"])
+        plt.xlabel("检测孕周（周）")
+    else:
+        x_axis = x_grid + wmean(df["BMI"], df["w"])
+        plt.xlabel("BMI")
+    plt.plot(x_axis, y_prob, label="预测均值")
+    plt.fill_between(x_axis, lo_prob, hi_prob, alpha=0.25, label="95%CI")
+    plt.ylabel("预测Y浓度（比例）")
+    plt.title(title)
+    plt.legend(); plt.tight_layout(); plt.savefig(out_dir/fn, dpi=220); plt.close()
+
+# 用带权“中位数”和范围
+def wmedian(x, w):
+    x = pd.to_numeric(x, errors="coerce"); w = pd.to_numeric(w, errors="coerce").clip(lower=0)
+    idx = np.argsort(x.values); xv, wv = x.values[idx], w.values[idx]
+    cw = np.cumsum(wv); total = cw[-1] if len(cw)>0 else np.nan
+    if not np.isfinite(total) or total<=0: return np.nan
+    return xv[np.searchsorted(cw, 0.5*total)]
+
+GA_med  = wmedian(df["GA_c"], df["w"]); BMI_med = wmedian(df["BMI_c"], df["w"]); Age_med = wmedian(df["Age_c"], df["w"]) if use_age else None
+GA_lo, GA_hi   = df["GA_c"].quantile(0.02),  df["GA_c"].quantile(0.98)
+BMI_lo, BMI_hi = df["BMI_c"].quantile(0.02), df["BMI_c"].quantile(0.98)
+GA_grid  = np.linspace(GA_lo,  GA_hi,  150)
+BMI_grid = np.linspace(BMI_lo, BMI_hi, 150)
+
+partial_plot("GA_c",  GA_grid,  GA_med, BMI_med, Age_med,
+             title="GAMM（带权/兼容）部分效应：孕周", fn="GAMM_w_partial_GA.png")
+partial_plot("BMI_c", BMI_grid, GA_med,  BMI_med, Age_med,
+             title="GAMM（带权/兼容）部分效应：BMI", fn="GAMM_w_partial_BMI.png")
+
+print("\n[GAMM·带权] 输出：", out_dir.resolve())
+
+
+\end{lstlisting}

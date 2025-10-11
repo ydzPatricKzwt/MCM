@@ -1,0 +1,159 @@
+\begin{lstlisting}
+
+###问题2_核心代码
+
+
+#单人 Ti 构造
+def construct_Ti(df, res, design_info, work_for_centering):
+    GA_mean  = work_for_centering["GA"].mean()
+    BMI_mean = work_for_centering["BMI"].mean()
+    Age_mean = work_for_centering["Age"].mean() if "Age" in work_for_centering.columns else None
+
+    rows = []
+    for pid, g in df.sort_values([COL_ID, COL_GA]).groupby(COL_ID):
+        g = g.sort_values(COL_GA)
+        ga = g[COL_GA].to_numpy(float)
+        yy = g[COL_Y].to_numpy(float)
+        bmi0 = float(g[COL_BMI].iloc[0])
+        age0 = float(g[COL_AGE].iloc[0]) if (COL_AGE in g.columns) else None
+
+        thr = 0.04
+        cross_T = None
+        for j in range(1, len(ga)):
+            if (yy[j-1] < thr) and (yy[j] >= thr):
+                t1, t2 = ga[j-1], ga[j]
+                y1, y2 = yy[j-1], yy[j]
+                w = 0.5 if (y2==y1) else np.clip((thr - y1)/(y2 - y1), 0.0, 1.0)
+                cross_T = t1 + w*(t2 - t1)
+                break
+
+        if cross_T is not None:
+            rows.append(dict(id=pid, BMI0=bmi0, Age0=age0, T=float(cross_T),
+                             source="interp", n_tests=len(g), first_ga=float(ga[0]), 
+                             last_ga=float(ga[-1])))
+            continue
+
+        #无跨越 → 用带权 GAMM 的固定效应解根
+        def f(t):
+            lin = predict_logit_mean(design_info, res,
+                                     GA=np.array([t]),
+                                     BMI=np.array([bmi0]),
+                                     Age=np.array([age0]) if (age0 is not None) else None,
+                                     GA_mean=GA_mean, BMI_mean=BMI_mean, Age_mean=Age_mean)
+            return inv_logit(lin) - thr
+
+        t_lo, t_hi = 8.0, 32.0
+        f_lo, f_hi = f(t_lo), f(t_hi)
+        if f_lo >= 0:
+            Ti = max(10.0, float(ga[0])) if len(ga)>0 else 10.0
+        elif f_hi <= 0:
+            Ti = max(32.0, float(ga[-1])) if len(ga)>0 else 32.0
+        else:
+            Ti = float(brentq(f, t_lo, t_hi, maxiter=200))
+        rows.append(dict(id=pid, BMI0=bmi0, Age0=age0, T=Ti,
+                         source="gamm", n_tests=len(g), first_ga=float(ga[0]), last_ga=float(ga[-1])))
+    return pd.DataFrame(rows).sort_values("BMI0").reset_index(drop=True)
+
+
+#DP 分段
+def precompute_sums_logT(Ti_df, weights=None):
+    z = np.log(np.clip(Ti_df["T"].values, 1e-6, None))
+    if weights is None:
+        w = np.ones_like(z)
+    else:
+        w = np.asarray(weights, float)
+    W   = np.concatenate([[0.0], np.cumsum(w)])
+    S   = np.concatenate([[0.0], np.cumsum(w * z)])
+    S2  = np.concatenate([[0.0], np.cumsum(w * z * z)])
+    return z, w, W, S, S2
+
+
+#加权核ECDF
+ALPHA_KERNEL = ALPHA_KERNEL
+def kernel_ecdf_factory_weighted(samples, weights=None, alpha=ALPHA_KERNEL):
+    xs = np.asarray(samples, float)
+    n  = len(xs)
+    if n == 0: return lambda t: 0.0
+    if weights is None:
+        w = np.ones(n, float)
+    else:
+        w = np.asarray(weights, float).clip(min=0.0)
+        if w.sum() <= 0: w = np.ones(n, float)
+    mu = np.sum(w*xs)/np.sum(w)
+    var = np.sum(w*(xs-mu)**2)/np.sum(w)
+    sd = np.sqrt(max(var, 1e-12))
+    h_silverman = 1.06 * sd * (n ** (-1/5))
+    h = max(H_MIN, alpha * h_silverman)
+    w_norm = w / np.sum(w); inv_h = 1.0 / h
+    def Fhat(t):
+        t_arr = np.atleast_1d(t).astype(float)
+        Z = (t_arr[:, None] - xs[None, :]) * inv_h
+        vals = stats.norm.cdf(Z) @ w_norm
+        return float(vals[0]) if np.isscalar(t) else vals
+    return Fhat
+
+#风险函数
+def expected_risk_enhanced(F, t0, delta=DELTA, group_stats=None, 
+                           group_idx=None, total_groups=None):
+    t_max = max(40.0, 28.0 + 6.0)
+    risk = LAMBDA_FAIL * (1.0 - F(t0))
+    if group_stats and group_idx is not None and total_groups is not None:
+        mean_T = group_stats['mean_T']
+        std_T = group_stats['std_T']
+        mean_BMI = group_stats['mean_BMI']
+        if mean_BMI > 35:      
+            early_penalty, late_penalty = 0.5, 2.0
+        elif mean_BMI < 28:    
+            early_penalty, late_penalty = 1.5, 0.8
+        else:                  
+            early_penalty, late_penalty = 1.0, 1.0
+        risk *= early_penalty
+        variability_factor = 1.0 + 0.1 * (std_T / max(mean_T, 1))
+        t_prev = 0.0; tk = t0
+        while tk <= t_max:
+            mass = max(F(tk) - F(t_prev), 0.0)
+            base_weight = stage_weight(tk)
+            if tk > 20: base_weight *= late_penalty
+            risk += base_weight * variability_factor * mass
+            t_prev = tk; tk += delta
+        tail = max(1.0 - F(t_prev), 0.0)
+        if tail > 0:
+            risk += stage_weight(t_max + 1e-6) * late_penalty * variability_factor * tail
+    else:
+        t_prev = 0.0; tk = t0
+        while tk <= t_max:
+            mass = max(F(tk) - F(t_prev), 0.0)
+            risk += stage_weight(tk) * mass
+            t_prev = tk; tk += delta
+        tail = max(1.0 - F(t_prev), 0.0)
+        if tail > 0:
+            risk += stage_weight(t_max + 1e-6) * tail
+    return float(risk)
+
+
+#最佳时点
+def optimize_t_star_enhanced(F, group_stats, group_idx, total_groups):
+    mean_T = group_stats['mean_T']; std_T = group_stats['std_T']
+    median_T = group_stats['median_T']; mean_BMI = group_stats['mean_BMI']
+    if mean_BMI < 28:
+        win_center = max(WIN_MIN, min(median_T - std_T, 14))
+        win_width = min(6, 1.5 * std_T)
+    elif mean_BMI > 35:
+        win_center = min(WIN_MAX - 2, max(median_T, 16))
+        win_width = min(8, 2 * std_T)
+    else:
+        win_center = max(WIN_MIN + 2, min(median_T - 0.3 * std_T, WIN_MAX - 3))
+        win_width = min(7, 1.8 * std_T)
+    search_min = max(WIN_MIN, win_center - win_width/2)
+    search_max = min(WIN_MAX, win_center + win_width/2)
+    if search_max - search_min < 4:
+        if mean_BMI < 30: search_max = min(WIN_MAX, search_min + 4)
+        else:             search_min = max(WIN_MIN, search_max - 4)
+    t_grid = np.arange(search_min, search_max + 1e-9, T_GRID_STEP)
+    risks = [expected_risk_enhanced(F, t, group_stats=group_stats,
+        group_idx=group_idx, total_groups=total_groups) for t in t_grid]
+    if len(risks) == 0: return float(mean_T), 1.0
+    k = int(np.argmin(risks))
+    return float(t_grid[k]), float(risks[k])
+
+\end{lstlisting}

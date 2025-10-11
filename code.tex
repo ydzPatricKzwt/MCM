@@ -1,0 +1,80 @@
+
+{\centering \section*{附件A: 支撑材料文件列表}}
+
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{ll}
+    \toprule
+    文件名 & 简介 \\
+    \midrule
+    % Python代码文件部分
+    数据预处理.py & 数据预处理相关代码实现 \\
+    问题1\_相关分析.py & 问题1的相关分析代码 \\
+    问题1\_LMM.py & 问题1的LMM模型实现代码 \\
+    问题1\_GAMM.py & 问题1的GAMM模型实现代码 \\
+    问题2.py & 问题2的求解代码 \\
+    问题3.py & 问题3的求解代码 \\
+    问题4.py & 问题4的求解代码 \\
+    \midrule
+    % 数据与结果文件部分
+    AI 工具使用详情说明.pdf & 本次数模比赛AI工具使用报告 \\
+    GAMM\_coef\_table\_weighted.xlsx & 问题1 GAMM模型各指标信息 \\
+    GAMM\_model\_summary\_weighted.txt & 问题1 GAMM建模过程信息报告 \\
+    聚类自助法\_斯皮尔曼相关分析结果\_带权.xlsx & 问题1 斯皮尔曼相关分析表格 \\
+    聚类自助法\_所有配对结果\_带权.xlsx & 问题1 所有配对结果表 \\
+    聚类自助法\_显著配对结果\_带权.xlsx & 问题1 显著配对结果表 \\
+    bic\_table.txt & 问题2 BMI最优分组决策数据 \\
+    bmi\_groups\_results.csv & 问题2 最优分组的各组信息 \\
+    run\_summary.txt & 问题2 建模过程信息报告 \\
+    Ti\_table.csv & 问题2 个体首次达标时间信息表 \\
+    groups\_policy\_improved.csv & 问题3 BMI最优分组的各组信息 \\
+    summary\_improved.txt & 问题3 建模过程信息报告 \\
+    best\_model.pkl & 问题4 训练的最佳性能机器学习模型 \\
+    best\_model\_info.json & 问题4 记录最佳模型的参数 \\
+    analysis\_report.txt & 问题4 机器学习模型训练报告 \\
+    model\_metrics.xlsx & 问题4 各模型多性能指标汇总 \\
+    resample\_stats.xlsx & 问题4 训练各模型的数据集特征汇总 \\
+    processed\_data.xlsx & 问题4 处理过程中对附件数据的加工 \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:file清单}
+\end{table}
+
+{\centering \section*{附录B: 核心python代码}}
+
+\noindent \textbf{0.1} 这是数据预处理所用核心代码，进行数据读取并标准化，计算质量阈值，软门控判定并对样本质量评分，为进一步分析做好准备。
+% 第一个附录 appendices是附录环境
+\begin{appendices}
+\input{pb0}
+\end{appendices}
+
+\noindent \textbf{0.2} 这是问题一相关性分析所用核心代码，基于聚类自助法计算了带权相关性考虑了数据的聚类，并评估相关性的显著性，提供p值。
+\begin{appendices}
+\input{pb1.Spear}
+\end{appendices}
+
+\noindent \textbf{0.3} 这是广义加性混合模型GAMM求解核心程序，主要目标是分析孕周、BMI等因素与Y染色体浓度之间的关系。它对数据进行预处理，处理缺失值，应用加权分析，并通过使用立方体回归样条和混合线性模型探索最佳的GAMM配置。
+\begin{appendices}
+\input{pb1.GAMM}
+\end{appendices}
+
+ \noindent \textbf{0.4}这是使用线性混合模型（LMM）分析同一孕期数据的核心程序。它计算加权均值，并使用混合效应方法拟合变换后的数据（logit转换）。输出包括模型评估所需的AIC、BIC和对数似然值。用于与GAMM模型对比。
+\begin{appendices}
+\input{pb1.LMM}
+\end{appendices}
+
+ \noindent \textbf{0.5}这是解决问题二所用核心代码，进行数据预处理、阈值计算和对各种基因标记进行软质量控制标记，处理与Y染色体浓度及其他测量相关的数据，应用质量控制的阈值。
+\begin{appendices}
+\input{pb2}
+\end{appendices}
+
+ \noindent \textbf{0.6}这是解决问题三所用核心代码，继续运用了问题一的广义加性模型和正交化技术分析孕期相关数据，处理BMI、年龄、身高和体重等特征，预测Y染色体浓度。
+\begin{appendices}
+\input{pb3}
+\end{appendices}
+
+ \noindent \textbf{0.7}这是问题四所用核心代码，特征提取并输入到所用的两个机器学习模型中进行训练。通过重采样方法解决类别不平衡的问题。
+\begin{appendices}
+\input{pb4}
+\end{appendices}
+

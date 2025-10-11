@@ -1,0 +1,284 @@
+\begin{lstlisting}
+
+import re
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+from patsy import dmatrices
+from scipy import stats
+import matplotlib, matplotlib.pyplot as plt
+from pathlib import Path
+import warnings
+
+
+matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial Unicode MS", "DejaVu Sans"]
+matplotlib.rcParams["axes.unicode_minus"] = False
+
+CANDIDATES = [
+    ("附件-男胎检测数据-处理.xlsx", "附件-男胎检测数据-处理"),
+    ("附件.xlsx", "男胎检测数据"),
+]
+COL_ID, COL_Y, COL_GA, COL_BMI, COL_AGE, COL_W = "孕妇代码", "Y染色体浓度", "检测孕周", "孕妇BMI", "年龄", "w_Q"
+out_dir = Path("./model_outputs_lmm_w"); out_dir.mkdir(parents=True, exist_ok=True)
+
+def parse_gestation_to_weeks(x):
+    if pd.isna(x): return np.nan
+    s = str(x).strip()
+    try: return float(s)
+    except: pass
+    m = re.search(r'(\d+)\s*(?:周|w|W)?\s*\+?\s*(\d+)?\s*(?:天|d|D)?', s)
+    if m:
+        w = float(m.group(1)); d = float(m.group(2)) if m.group(2) else 0.0
+        return w + d/7.0
+    m2 = re.search(r'(\d+)', s)
+    return float(m2.group(1)) if m2 else np.nan
+
+def smithson_verkuilen(y):
+    y = y.clip(0, 1); n = y.notna().sum()
+    return (y*(n-1) + 0.5) / n
+
+def wmean(x, w):
+    x = pd.to_numeric(x, errors="coerce"); w = pd.to_numeric(w, errors="coerce").clip(lower=0)
+    return np.nansum(w*x)/np.nansum(w) if np.nansum(w)>0 else np.nan
+
+def mixedlm_lrt(res_small, res_large, df_diff=None):
+    LR = 2.0*(res_large.llf - res_small.llf)
+    if df_diff is None:
+        df_diff = len(res_large.params) - len(res_small.params)
+    p = stats.chi2.sf(LR, df_diff)
+    return LR, df_diff, p
+
+# 读取
+last_err = None
+for path, sheet in CANDIDATES:
+    try:
+        df = pd.read_excel(path, sheet_name=sheet)
+        used_path, used_sheet = path, sheet
+        break
+    except Exception as e:
+        last_err = e
+else:
+    raise SystemExit(f"读取失败：{last_err}")
+
+for c in [COL_ID, COL_Y, COL_GA, COL_BMI]:
+    if c not in df.columns:
+        raise SystemExit(f"找不到列：{c}（数据源：{used_path}/{used_sheet}）")
+if COL_W not in df.columns:
+    print("[提示] 未找到 w_Q 列，默认权重=1")
+    df[COL_W] = 1.0
+
+use_cols = [COL_ID, COL_Y, COL_GA, COL_BMI, COL_W] + ([COL_AGE] if COL_AGE in df.columns else [])
+df = df[use_cols].copy()
+df = df.rename(columns={COL_ID:"id", COL_Y:"Y", COL_GA:"GA_raw", COL_BMI:"BMI_raw", COL_W:"w"})
+if COL_AGE in df.columns: df = df.rename(columns={COL_AGE:"Age_raw"})
+
+df["GA"]  = df["GA_raw"].apply(parse_gestation_to_weeks)
+df["BMI"] = pd.to_numeric(df["BMI_raw"], errors="coerce")
+if "Age_raw" in df.columns: df["Age"] = pd.to_numeric(df["Age_raw"], errors="coerce")
+df["w"]   = pd.to_numeric(df["w"], errors="coerce").fillna(1.0).clip(lower=0)
+
+keep = ["id","Y","GA","BMI","w"] + (["Age"] if "Age" in df.columns else [])
+df = df[keep].dropna().copy()
+
+# SV + logit
+df["Y_star"] = smithson_verkuilen(df["Y"])
+df["logitY"] = np.log(df["Y_star"]/(1-df["Y_star"]))
+
+# 加权中心化
+GA_mu  = wmean(df["GA"],  df["w"])
+BMI_mu = wmean(df["BMI"], df["w"])
+df["GA_c"]  = df["GA"]  - GA_mu
+df["BMI_c"] = df["BMI"] - BMI_mu
+use_age = "Age" in df.columns
+if use_age:
+    Age_mu = wmean(df["Age"], df["w"])
+    df["Age_c"] = df["Age"] - Age_mu
+
+print(f"样本量：{len(df)}；孕妇个体数：{df['id'].nunique()}；有效权重和={df['w'].sum():.1f}")
+
+#带权拟合
+def fit_mlm(formula_str):
+    w = np.asarray(df["w"].values, dtype=float)
+    try:
+        md = smf.mixedlm(formula_str, data=df, groups=df["id"], re_formula="1", weights=w)
+        res = md.fit(reml=False, method="lbfgs")
+        # 保持统一接口
+        try:
+            res._exog_names = list(res.model.exog_names)
+        except Exception:
+            pass
+        return res
+    except (TypeError, ValueError):
+        print(f"[警告] MixedLM 不支持 weights，公式 {formula_str} 改用 √w 伪加权。")
+        # 用 patsy 生成设计矩阵（含截距，并能拿到列名）
+        y_mat, X_mat = dmatrices(formula_str, df, return_type="dataframe")
+        y = np.asarray(y_mat).ravel()
+        X = np.asarray(X_mat); exog_names = list(X_mat.columns)
+        sw = np.sqrt(np.clip(w, 1e-8, None))
+        y_t = y * sw
+        X_t = X * sw[:, None]
+        Z_t = np.ones((len(df), 1)) * sw[:, None]   # 随机截距也乘 √w
+        md = sm.MixedLM(y_t, X_t, groups=df["id"], exog_re=Z_t)
+        res = md.fit(reml=False, method="lbfgs")
+        # 把名字挂到结果上
+        res._exog_names = exog_names
+        return res
+
+fit0 = fit_mlm("logitY ~ 1")
+fit1 = fit_mlm("logitY ~ 1 + GA_c")
+fit2 = fit_mlm("logitY ~ 1 + GA_c + BMI_c")
+if use_age:
+    fit3 = fit_mlm("logitY ~ 1 + GA_c + BMI_c + Age_c")
+    final_fit, final_name = fit3, "M3: GA + BMI + Age（带权/兼容）"
+else:
+    final_fit, final_name = fit2, "M2: GA + BMI（带权/兼容）"
+
+print("\n=== 最终模型摘要（{}） ===".format(final_name))
+print(final_fit.summary())
+
+# LRT
+LR_10 = mixedlm_lrt(fit0, fit1, df_diff=1)
+LR_21 = mixedlm_lrt(fit1, fit2, df_diff=1)
+print("\n=== 似然比检验（带权/兼容） ===")
+print(f"M0→M1（+孕周）: LR={LR_10[0]:.3f}, df={LR_10[1]}, p={LR_10[2]:.4g}")
+print(f"M1→M2（+BMI） : LR={LR_21[0]:.3f}, df={LR_21[1]}, p={LR_21[2]:.4g}")
+if use_age:
+    LR_32 = mixedlm_lrt(fit2, fit3, df_diff=1)
+    print(f"M2→M3（+年龄）: LR={LR_32[0]:.3f}, df={LR_32[1]}, p={LR_32[2]:.4g}")
+
+# 边际/条件R²（简化近似）
+try:
+    var_random = float(getattr(final_fit, "cov_re", np.array([[np.nan]])).iloc[0,0])
+except Exception:
+    var_random = float(np.asarray(getattr(final_fit, "cov_re", np.array([[np.nan]])))[0,0])
+var_resid = float(final_fit.scale)
+var_fitted = float(np.var(final_fit.fittedvalues, ddof=1))
+denom = var_fitted + var_resid if np.isfinite(var_fitted + var_resid) else np.nan
+r2_c = var_fitted/denom if denom and denom>0 else np.nan
+r2_m = max(0.0, r2_c - var_random/(var_random + var_resid + 1e-9)) if np.isfinite(r2_c) else np.nan
+print("\n=== R²（Nakagawa & Schielzeth，带权/兼容） ===")
+print(f"边际R²：{r2_m:.4f}；条件R²：{r2_c:.4f}")
+print("方差组成（近似）：", {'var_random': var_random, 'var_resid': var_resid})
+
+# 等效孕周 & OR 
+# 固定效应的名字与向量
+fe_names = getattr(final_fit, "_exog_names", None)
+if fe_names is None and hasattr(final_fit, "model") and hasattr(final_fit.model, "exog_names"):
+    fe_names = list(final_fit.model.exog_names)
+
+k_fe = int(getattr(final_fit, "k_fe", len(fe_names) if fe_names is not None else 0))
+beta_all = np.asarray(final_fit.params)
+beta_fe  = beta_all[:k_fe]                      
+cov_all  = np.asarray(final_fit.cov_params())
+cov_fe   = cov_all[:k_fe, :k_fe]                 
+
+if fe_names is not None and "GA_c" in fe_names and "BMI_c" in fe_names:
+    idx_ga  = fe_names.index("GA_c")
+    idx_bmi = fe_names.index("BMI_c")
+    b_ga  = float(beta_fe[idx_ga])
+    b_bmi = float(beta_fe[idx_bmi])
+    cov2  = cov_fe[[idx_ga, idx_bmi]][:, [idx_ga, idx_bmi]]
+
+    theta = -b_bmi / b_ga
+    d_b1 = b_bmi / (b_ga**2); d_b2 = -1.0 / b_ga
+    grad = np.array([[d_b1, d_b2]])
+    var_theta = float(np.squeeze(grad @ cov2 @ grad.T))
+    se = np.sqrt(max(var_theta, 0))
+    z = stats.norm.ppf(0.975); lo, hi = theta - z*se, theta + z*se
+
+    print("\n=== ‘等效孕周’（带权/兼容） ===")
+    print(f"点估计：{theta:.3f} 周；95%CI [{lo:.3f}, {hi:.3f}]；SE={se:.3f}")
+    print("\n=== 胜算比 OR（logit 尺度） ===")
+    print(f"孕周 +1 周：OR={np.exp(b_ga):.3f}")
+    print(f"BMI  +1   ：OR={np.exp(b_bmi):.3f}")
+else:
+    print("\n[提示] 无法定位 GA_c/BMI_c 的系数（因列名丢失），跳过‘等效孕周/OR’。")
+
+#  诊断与部分效应 
+def inv_logit(z): return 1.0/(1.0+np.exp(-z))
+plt.figure(figsize=(7,5))
+plt.scatter(final_fit.fittedvalues, final_fit.resid, s=10, alpha=0.6)
+plt.axhline(0, color="k", lw=1); plt.xlabel("拟合值（logitY）"); plt.ylabel("残差")
+plt.title("残差-拟合图（LMM·带权/兼容）")
+plt.tight_layout(); plt.savefig(out_dir/"resid_vs_fitted_w.png", dpi=220)
+
+# 用 names 来构造预测矩阵
+def predict_curve(var_name, grid):
+    # 仅用固定效应名/参数预测
+    if fe_names is None:
+        return None, None
+    base = {nm:0.0 for nm in fe_names}
+    if "Intercept" in base: base["Intercept"] = 1.0
+
+    X_rows = []
+    for val in grid:
+        row = base.copy()
+        if var_name in row:
+            row[var_name] = val
+        X_rows.append([row[nm] for nm in fe_names])
+    X = np.asarray(X_rows)
+
+    yhat = inv_logit(X @ beta_fe)   # 用固定效应参数
+    # 反中心化回原尺度
+    if var_name == "GA_c":
+        x_axis = grid + GA_mu
+    elif var_name == "BMI_c":
+        x_axis = grid + BMI_mu
+    else:
+        x_axis = grid
+    return x_axis, yhat
+
+
+GA_grid  = np.linspace(df["GA_c"].quantile(0.02),  df["GA_c"].quantile(0.98), 120)
+BMI_grid = np.linspace(df["BMI_c"].quantile(0.02), df["BMI_c"].quantile(0.98), 120)
+
+xg, yg = predict_curve("GA_c", GA_grid)
+if xg is not None:
+    plt.figure(figsize=(7,5))
+    plt.plot(xg, yg); plt.xlabel("检测孕周（周）"); plt.ylabel("预测Y浓度（比例）")
+    plt.title("部分效应：孕周（带权/兼容）")
+    plt.tight_layout(); plt.savefig(out_dir/"partial_effect_GA_w.png", dpi=220)
+
+xb, yb = predict_curve("BMI_c", BMI_grid)
+if xb is not None:
+    plt.figure(figsize=(7,5))
+    plt.plot(xb, yb); plt.xlabel("BMI"); plt.ylabel("预测Y浓度（比例）")
+    plt.title("部分效应：BMI（带权/兼容）")
+    plt.tight_layout(); plt.savefig(out_dir/"partial_effect_BMI_w.png", dpi=220)
+plt.close("all")
+
+if fe_names is None:
+    fe_names = [f"x{i+1}" for i in range(k_fe)]
+fe_se = np.asarray(final_fit.bse)[:k_fe]
+
+coef = pd.DataFrame({"name": fe_names, "Estimate": beta_fe})
+z    = coef["Estimate"].values / fe_se
+p    = 2*stats.norm.sf(np.abs(z))
+ciL  = coef["Estimate"].values - stats.norm.ppf(0.975)*fe_se
+ciH  = coef["Estimate"].values + stats.norm.ppf(0.975)*fe_se
+
+out_coef = pd.DataFrame({
+    "Estimate": coef["Estimate"].values,
+    "SE": fe_se,
+    "z": z,
+    "p": p,
+    "CI_low": ciL,
+    "CI_high": ciH
+}, index=fe_names)
+out_coef.to_excel(out_dir/"LMM_coef_table_weighted_compat.xlsx")
+
+
+with open(out_dir/"model_summary_weighted_compat.txt","w",encoding="utf-8") as f:
+    f.write(
+        f"数据源：{used_path}/{used_sheet}\n"
+        f"样本量：{len(df)}；孕妇数：{df['id'].nunique()}；权重和：{df['w'].sum():.1f}\n"
+        f"最终模型：{final_name}\n"
+        f"边际R²：{r2_m:.4f}；条件R²：{r2_c:.4f}\n"
+        f"随机截距方差：{var_random:.6f}；残差方差：{var_resid:.6f}\n"
+    )
+
+print("\n[LMM·带权/兼容] 输出：", out_dir.resolve())
+
+
+\end{lstlisting}

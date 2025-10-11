@@ -1,0 +1,138 @@
+问题二的核心目标是 通过BMI 分组确定每组最佳检测时点，实现潜在风险最小化的目标优化。基于问题一所建立的最优GAMM模型，本文所采取的方法是先计算每位孕妇的Y 染色体浓度首次达标时间$T_i$，再以 BMI 为依据对 $T_i$ 进行最优分组，最后通过风险函数找到每组最佳检测时点，z最后分析检测误差的影响。
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/5.2/mindmap.png}
+    \caption{问题二处理流程}
+    \label{fig:5.2mindmap}
+\end{figure}
+
+\noindent $\bullet$ \textbf{个体首次达标时间\(T_i\)的确定 }首先筛选附件数据，保留孕妇代码、检测孕周、BMI、Y 染色体浓度 4 类核心列（若有年龄数据则额外保留）。由附件资料，可知孕妇检测情况按自身检测结果相互对比可分为两种情况，相应的$T_i$确定方法列举如表\ref{tab:ti}所示\footnote{若外推 $T_i < 10$ 周则取 10 周作为 $T_i$。}：
+
+\begin{table}[htbp]  \centering
+  \caption{不同情况下 $T_i$ 的计算方法}
+  \label{tab:ti}
+  \begin{tabular}{@{}ll@{}}
+    \toprule
+    检测记录情况 & 计算方法\\
+    \midrule
+    浓度：未达标→达标 & 在达标孕周区间内线性插值计算 \(T_i\) \\
+    \addlinespace
+    检测浓度均 < 4 \% 或均 $\geq$ 4\% & 用 GAMM 模型外推得到理论 \(T_i\)  \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{BMI轴加权动态规划} 
+
+在 NIPT 时点选择中，传统经验分组（如将 BMI 按固定等距区间划分）是常用方法，但该方法一方面忽略了数据的内在分布规律，某区间内$T_i$ 可能差异较大，不应归为一组，另一方面也可能导致各等距区间样本量失衡，基于以上考虑，本文以\(T_i\)的实际分布规律为依据，通过统计方法找到 “组内差异小、组间差异大” 的 BMI 分组，确保每组孕妇的达标时间特征一致。把所有孕妇按 BMI 升序排成 $i=1,\dots,N$，把 BMI 轴切成若干区间，那么动态规划的目标是：在固定组数 k 时，找到把序列划成 k 段的切法，使组内代价之和最小。
+
+\noindent$\bullet$\textbf{分组合理性量化 } 对于按BMI 升序后的索引区间$[i,j]$，(含样本 $\{z_u\}_{u=i}^j$ 服从正态分布
+$z_u \stackrel{\text{i.i.d.}}{\sim} \mathcal{N}(\mu_g, \sigma_g^2) $)。以个体权重 \(w_i\) 计算加权均值与方差：
+\(\mu = \frac{\sum_{r = i}^{j} w_r x_r}{\sum_{r = i}^{j} w_r}, \quad \sigma^2 = \frac{\sum_{r = i}^{j} w_r (x_r - \mu)^2}{\sum_{r = i}^{j} w_r}, \quad x_r = \log T_r.\)
+段的最小负对数似然：
+那么，该段最小负对数似然（NLL）为
+\begin{equation}
+\mathcal{C}(i, j) \doteq -\log L(\mu, \sigma^2) = \frac{W}{2} \left[ 1 + \log(2\pi \sigma^2) \right], \quad W = \sum_{r = i}^{j} w_r.
+\end{equation}
+
+计算得到某一 BMI 区间作为一组的代价，NLL 越小，说明该区间内孕妇的\(T_i\)分布越集中，分组越合理。
+
+ \noindent$\bullet$\textbf{动态规划全局最优分段 }动态规划的核心逻辑是递推寻找最小总代价。令 $\text{DP}_k[j]$ 为“将前 $j$ 个样本切成 $k$ 段”的最小总代价，$\text{DP}_1[j] = C(1:j)$。建立动态规划模型：
+\begin{equation}
+    \text{DP}_k[j] = \min_{i \in \{k, \dots, j\}} \left\{ \text{DP}_{k-1}[i-1] + \mathcal{C}(i:j) \right\}.
+\end{equation}
+
+遍历所有可能的分组切点\footnote{该动态规划算法的时间复杂度是 \(O(kN^2)\)，这样的复杂度是可以承受的。}，保存回溯指针即可得到在给定 $k$ 下的全局最优切点集合 $\{c_1, \dots, c_{k-1}\}$。 BIC 用有效样本量 \(W_{\text{tot}} = \sum_i w_i\)：\(\text{BIC}(K) = 2 \sum_{g = 1}^{K} \mathcal{C}_g + 2K \log W_{\text{tot}},\)取 BIC 最小的 \(K^{*}\)。求解结果如图\ref{fig:5.2.02}所示。
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/5.2/01.png}
+    \caption{BIC随组数变化折线图}
+    \label{fig:5.2.02}
+\end{figure}
+
+\subsubsection{最佳NIPT检测时点建模}
+
+\noindent $\bullet$ \textbf{核 ECDF 估计组内达标分布 }  为了用非参数方法估计每组孕妇的达标概率随孕周变化的规律，从而为风险函数计算提供概率基础，本文利用核 ECDF 通过高斯核函数对 经验累计分布函数ECDF进行平滑，得到连续、单调的t时点达标概率\(\hat F_g(t)\)。令\(\mathcal{I}_g = [c_{g - 1}, c_g), \quad g = 1, \dots, G, \)为G个连续区间，\(S_g = \{i: \text{BMI}_i \in \mathcal{I}_g\}\)为第g组样本集。在得到每组的 \(\{T_i\}_{i \in S_g}\) 后:
+\begin{equation}
+\hat{F}_g(t) = \frac{1}{n_g} \sum_{i \in S_g} \Phi\left( \frac{t - T_i}{h_g} \right), \quad h_g = 1.06 \, s_g \, n_g^{-1/5}.
+\end{equation}
+其中 \(\Phi\) 是标准正态分布函数，\(s_g\) 为 \(\{T_i\}\) 的样本标准差。该 \(\hat{F}_g\) 严格单调非降、在全域 \([0,1]\) 有界，适合做风险积分。
+
+\noindent $\bullet$ \textbf{风险函数优化 }  设首检时点 \(t \in [10, 25]\)，未达标则每隔 \(\Delta > 0\) 周复检：\(t_k = t + k\Delta, \, k = 0, 1, 2, \dots\),  \(\lambda \geq 0\)为首检失败惩罚，那么：对于第g组，期望风险函数为
+\begin{equation}
+\mathcal{R}_g(t) = \sum_{k=0}^{\infty} w(t_k) \left[ \hat{F}_g(t_k) - \hat{F}_g(t_{k-1}) \right] + \lambda \left[ 1 - \hat{F}_g(t) \right].
+\end{equation}
+约定 \(t_{-1} = 0\)。最优检测时点:
+\begin{equation}
+t_g^* = \arg \min_{t \in [10,25]} \mathcal{R}_g(t).
+\end{equation}
+利用python程序在 $t\in[10,25]$ 上一维搜索最小的点。对每组给出 \(t_g^*\)、一次成功率 \(\hat{F}_g(t_g^*)\)、复检率 \(1 - \hat{F}_g(t_g^*)\) 以及 \(\mathcal{R}_g(t_g^*)\)。
+
+
+\subsubsection{求解过程与结果展示}
+
+\begin{compactitem}
+    \item Step 1 读数与质控汇总 $\to$ 汇出个体权重 $w_i$；
+    \item Step 2 拟合带权 GAMM，得到 $\hat{\sigma}^2_s, \hat{\sigma}^2_t$；
+    \item Step 3 计算每位孕妇的 $T_i$并保存；
+    \item Step 4  BMI 按升序排列，做 DP+BIC 分段选出最优组数 $\hat{G}^*$ 与切点；
+    \item Step 5 对每组计算 $\hat{F}_g(t)$ 并最小化 $R_g(t)$ 得到 $t_g^*$，同时给出一次达标率” $\hat{F}_g(t_g^*)$ 与复检率 $1 - \hat{F}_g(t_g^*)$。
+\end{compactitem}
+
+求解结果图\ref{fig:665}和\ref{fig:1111}所示。
+曲线特征反映分组达标规律，BMI较小组曲线上升越陡峭，该组孕妇在对应孕周区间内达标概率增长快，整体达标时间更早。通过对比不同组曲线的差异，可验证 BMI 分组的有效性。低 BMI 组的核 ECDF 曲线上升早、达标概率高，最优时点更早；高 BMI 组曲线上升晚、达标概率增长慢，最优时点更晚，符合BMI 越高，Y 染色体浓度达标越慢的临床规律。结合曲线可直接读取每组的 一次达标率（最优时点对应的纵轴值）、复检率，为临床检测资源分配提供数据支持。
+\begin{figure}[htbp]
+    \centering
+    % 第一张图片
+    \begin{minipage}[t]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/5.2/03.png} % 替换为你的图片路径
+        \caption{各组核ECDF以及最优时点}
+        \label{fig:665}
+    \end{minipage}
+    % 第二张图片
+    \begin{minipage}[t]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/5.2/02.png} % 替换为你的图片路径
+        \caption{BMI划分散点图(最优检测时间水平)}
+        \label{fig:1111}
+    \end{minipage}
+\end{figure}    
+求解的各组划分情况以及相应最优NIPT罗列如下第一BMI组划分区间为20.7 \~{} 29.1, 最优NIPT时点为第14.2孕周，第二BMI组划分区间为29.1 \~{} 30.1，最优NIPT时点为第15.4孕周；第三BMI组划分区间为30.1 \~{} 31.2, 最优NIPT时点为第13.4孕周； 第四BMI组划分区间31.2 \~{} 32.6，最优NIPT时点为14.8孕周；第五BMI组划分区间为32.6 \~{} 33.4，最优NIPT时点为第14.0孕周；第六BMI组划分区间为33.5 \~{} 46.9 ，最优NIPT时点为第20.0周。
+
+\subsubsection{检测误差影响分析}
+
+实际检测中存在测序失败、不确定因素影响，量化误差的影响。本文通过 GAMM 模型的随机截距方差和残差方差，计算考虑误差后的个体达标概率，再通过组内平均得到误差修正后的组内达标概率。
+
+问题一 GAMM 在 logit 尺度上的线性预测模型为
+\(\hat{\eta}_i(t) = \mu_i(t) + u_i + \varepsilon_{it},\)
+其中个体随机截距 \(u_i \sim \mathcal{N}(0, \sigma_u^2)\)，残差 \(\varepsilon_{it} \sim \mathcal{N}(0, \sigma^2)\)。
+对给定个体 i 与时点 t，其一次达标的边际概率近似为
+\begin{equation}
+\begin{aligned}
+p_i(t) &= \int \text{logit}^{-1}\left( \mu_i(t) - \eta^{\dagger} + \sigma Z \right) \phi(Z) dZ 
+       &\approx \sum_{q=1}^{Q} w_q \text{logit}^{-1}\left( \mu_i(t) - \eta^{\dagger} + \sigma \sqrt{2} x_q \right), \\
+\end{aligned} 
+\end{equation}
+其中 \((x_q, w_q)\) 为 Q 点 Hermite 节点与权重，\(\sigma^2 = \sigma_u^2 + \sigma_e^2\)。取 \(Q = 20 \sim 50\) 足够稳定。组内的平均边际概率曲线：
+\begin{equation}
+\bar{p}_g(t) = \frac{1}{n_g} \sum_{i \in S_g} p_i(t).
+\end{equation}
+将 \(\bar{p}_g(t)\) 单调化得到 \(\bar{F}_g^{(\text{err})}(t)\) 作为误差-修正的累计达标函数，重算期望风险函数以及最优检测时点：
+\begin{equation}
+\mathcal{R}_g^{(\text{err})}(t) = \sum_{k \geq 0} w(t_k) \left[ \bar{F}_g^{(\text{err})}(t_k) - \bar{F}_g^{(\text{err})}(t_{k - 1}) \right] + \lambda \left[ 1 - \bar{F}_g^{(\text{err})}(t) \right],
+\end{equation}
+\begin{equation}
+t_{g,\text{err}}^* = \arg \min_{t \in [10,25]} \mathcal{R}_g^{(\text{err})}(t).
+\end{equation}
+
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/5.2/05.png}
+    \caption{BMI与最优NIPT时点折线图（加权）}
+    \label{fig:img2}
+\end{figure}
+
+    图\ref{fig:img2}比较了各 BMI 分组中心的未修正达标概率曲折线与误差修正后的折线，实线代表展示了各组BMI中心群体及其最优NIPT时点，虚线加入了检测误差和个体差异。从图形上看，在考虑误差后，虚线整体上移，除了最高BMI一组NIPT时点有所前移外，最优NIPT时点均有不同程度推迟。据此，分组策略应当结合误差修正。
+
+

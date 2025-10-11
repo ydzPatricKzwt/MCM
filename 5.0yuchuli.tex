@@ -1,0 +1,93 @@
+
+
+附件所给数据出现异常、缺失、数据格式不统一等问题，如A139个体F栏末次月经日期缺失、B007个体怀孕日期早于末次月经日期、H栏检测日期数据有“年月日”与“年-月-日”两种格式，等等。为确保本次建模求解的准确性和有效性，本文首先对数据进行以下预处理：
+
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/5.0/mindmap.png}
+    \caption{数据预处理}
+    \label{fig:mindmap}
+\end{figure}    
+
+\subsection{数据清洗与补充}
+
+(1)日期格式统一与变换：将F栏末次月经与H栏检测日期对应数据格式统一转换为年-月-日；孕周数据格式从“$ \text{Week} \, \text{w} + \text{Day}$”转换为“$x$周”，转换公式为$ x = \text{Week} + \frac{\text{Day}}{7} $；
+ 
+(2)去掉BMI缺失数据组，去掉染色体Z值缺失数据组；
+
+(3)日期异常值删除：我们将实际怀孕日期定义为检测日期减去检测孕周，发现部分数据的实际怀孕日期早于末次月经记录日期，这可能和临床实际情景有关，鉴于建模与分析的严谨性，本文删除了这些日期异常值组对应数据；
+
+(4)末次月经缺失值补全：我们根据全表数据，对非缺失组按 $\text{检测日期} - \text{检测孕周对应天数} - \text{末次月经}$计算均值用于推测缺失值$^{[10]}$。
+
+
+\subsection{测序质量评估}
+
+软门控判定是筛选优质样本的核心步骤，本文预处理依次检测以下规则：若比对比例低于 比对比例的
+5\% 分位数（M5）、重复读段比例高于重复读段比例的 95\% 分位数 (N95)、过滤读段比例高于被过滤读段数比例95\%分位数（ AA95）、唯一比对读段数低于唯一比对读段数的 5\% 分位数 (O5)，或整体 GC 含量超出 [P5, 0.60] 范围，亦或任一染色体 ΔGC (为该染色体GC含量 与整体GC含量差值) 的 Z 值绝对值大于 3，则判定样本测序质量不合格，并记录具体的风险类型。最后统计每条样本的风险项数量以区分样本质量等级。
+
+对于被软门控的样本，程序会进一步计算质量评分 Q：
+\begin{equation}
+Q = \max\left( 0, \left( f_{\text{reads}} \times f_{\text{align}} \times f_{\text{dup}} \times f_{\text{filt}} \times f_{\text{gc\_overall}} \times f_{\text{delta}} \right)^{1/6} \right)
+\end{equation}
+
+% 各组成部分的定义
+其中各参数定义如下\footnote{\( \text{GC}_{\text{LOW}} \)为整体GC含量的5\%分位数;\( \text{GC}_{\text{HIGH}} \)为固定阈值0.60;\( Z_{\text{max}} \)为13/18/21号染色体ΔGC的Z分数绝对值的最大值}
+\begin{align*}
+% 唯一比对读段数归一化得分
+f_{\text{reads}} &= \min\left( \frac{\text{唯一比对读段数}}{O_5}, 1.0 \right) \\
+% 比对率归一化得分
+f_{\text{align}} &= \min\left( \frac{\text{比对率}}{M_5}, 1.0 \right) \\
+% 重复率归一化得分
+f_{\text{dup}} &= \max\left( 1.0 - \frac{\text{重复率}}{N_{95}}, 0.0 \right) \\
+% 过滤率归一化得分
+f_{\text{filt}} &= \max\left( 1.0 - \frac{\text{过滤率}}{AA_{95}}, 0.0 \right) \\
+% 整体GC含量归一化得分
+f_{\text{gc\_overall}} &= 
+\begin{cases} 
+\frac{\text{GC}_{\text{overall}}}{\text{GC}_{\text{LOW}}} & ,\text{若 } \text{GC}_{\text{overall}} < \text{GC}_{\text{LOW}} \\
+1.0 - \frac{\text{GC}_{\text{overall}} - \text{GC}_{\text{HIGH}}}{1.0 - \text{GC}_{\text{HIGH}}} & ,\text{若 } \text{GC}_{\text{overall}} > \text{GC}_{\text{HIGH}} \\
+1.0 & ,\text{其他情况}
+\end{cases} \\
+% ΔGC的Z分数归一化得分
+f_{\text{delta}} &= \max\left( 1.0 - \frac{Z_{\text{max}}}{3.0}, 0.0 \right)
+\end{align*}
+
+% 符号说明
+
+该评分综合考虑多维度指标：通过读段数量、比对比例、重复读段比例、过滤读段比例在对应分位数区间内的位置，转换为 0-1 的标准化得分；对整体 GC 含量超出合理范围的样本，采用 温和衰减 策略将其得分映射至 0.6-1.0 区间；对 ΔGC 偏差的样本，取 13/18/21 号染色体偏差得分的最小值，最终通过几何平均计算 Q 值，再根据 GAMMA（1.0）计算加权得分 ；其余样本的样本则默认权值为 1.0，无需计算 Q 值。
+
+针对孕妇一次抽血多次检测的情况，本文按未被软门控优先→ 权重越高越优→ 比对比例越高越优→唯一读段数越高越优→重复率 / 过滤率越低越优→ΔGC 最大绝对偏差越小越优→检测日期越早越优的优先级排序，仅保留每组中质量最优的 1 条样本，最终将筛选后的样本与关键指标整合。
+
+\subsection{数据可视化}
+
+为了从不同维度挖掘胎儿Y染色体浓度与孕妇孕周、BMI等等关键性指标的关联规律，基于预处理后的男胎孕妇数据，本文首先运用Origin程序进行如下的可视化分析。
+\begin{figure}[ht]
+    \centering
+    % 第一张图：占文本宽度48%
+    \begin{minipage}{0.45\textwidth}
+        \includegraphics[width=\linewidth]{figures/5.0/xiangxiantuA.png}
+        \caption{染色体Z值箱线图}
+        \label{fig:main1}
+    \end{minipage}
+    % 两图间距
+    % 第二张图：占文本宽度48%
+    \begin{minipage}{0.45\textwidth}
+        \includegraphics[width=\linewidth]{figures/5.0/xiangxiantuB.png}
+        \caption{性染色体浓度箱线图}
+\label{fig:main6789}
+    \end{minipage}
+  %  \label{fig:main}
+\end{figure}
+
+我们研究男胎的染色体数据并绘制了箱线图\ref{fig:main1}、\ref{fig:main6789}，初步分析数据特征。13号、18号、21号染色体的 Z 值分布整体近似对称，中位数与零轴接近，四分位间距较小。其中21号最为收敛、18号略显离散，离群点数量有限，说明三种染色体样本的总体均处于统计正常区。对比之下，X 与 Y 染色体的 Z 值波动更大，点云与核密度曲线均显示尾部较厚，说明在个体差异与测序波动的影响下，性染色体读数差异化更明显。 Y 浓度总体高于4\%门槛，但仍有约八分之一样本未达标，这说明按孕妇BMI和检测孕周分层优化检测时点具有必要性。
+
+\begin{figure}[H]
+\centering
+\subfloat[胎儿Y染色体浓度-孕周的分位数带]{\includegraphics[width=.30\linewidth]{figures/5.0/zhexiantu.png}\label{fig:02}}
+\subfloat[BMI频数分布直方图（男胎）]{\includegraphics[width=.30\linewidth]{figures/5.0/zhifangtu.png}\label{fig:03}}
+\subfloat[BMI频数分布直方图（女胎）]{\includegraphics[width=.30\linewidth]{figures/5.0/zhifangtunv.png}\label{fig:04}}
+\end{figure}
+
+图\ref{fig:02}分周计算 Y 浓度分位数，其中位数水平可观察到整体有波动，提示孕周以外因素也在对Y染色体浓度的变化起作用。阴影带宽度在不同孕周数区间不等，直接用“周”作分组做决策需谨慎。四分位距（IQR）区间大部分位于$4\%$ 之上，对于确定男胎最佳 NIPT 检测时点提供初步方向。从中位数层面看，折线水平远高于 4\% ，但IQR 带逼近甚至略低于 4\%，说明仍有相当比例样本可能不达标，这种风险随周数起伏。
+图\ref{fig:03}与图\ref{fig:04}用 Silverman 法则自动选择带宽，平滑直方图并叠加一条趋势曲线。趋势图线单峰、右偏，统一时点检测会让一部分高 BMI 人群更容易早测失败或者低于阈值，应按 BMI 分层选择检测时点。
+

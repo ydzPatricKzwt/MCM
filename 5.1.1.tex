@@ -1,0 +1,197 @@
+
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figures/5.1/mindmap.png}
+    \caption{问题一处理流程}
+    \label{fig:5.1mindmap}
+\end{figure}
+问题一的核心目标是在考虑存在同一孕妇重复测量的情况，刻画 Y 浓度 与 孕周、BMI 的函数关系，给出具有显著性水平的结论，在此基础上本文给出部分可视化结果。
+为分析胎儿 Y 染色体浓度与孕妇孕周数及 BMI 的关系，我们首先采用 Spearman 相关
+并以孕妇为簇进行自助法估计 95\% CI 与显著性；随后构建广义加性混合模型，因 $Y \in [0, 1]$
+采用 Smithson–Verkuilen 调整与 logit 链接。固定效应强制包含孕周与 BMI（并在扩展模
+型中加入年龄），以似然比检验方法（LRT）检验显著性。考虑测序质控指标，我们构造主
+成分质量得分以控制技术噪声，并在敏感性分析中比较删除 GC 范围在 40\% - 60 \% 之外
+的样本影响。进一步，我们将 Y ≥ 4\% 视为达标事件，拟合混合效应逻辑回归并报告 AUC
+与校准情况。
+
+\subsubsection{探索性分析}
+
+\begin{figure}[htbp]
+    \centering
+    % 第一张图片
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/5.1/yuchuliA.png} % 替换为你的图片路径
+        \caption{BMI - Y染色体浓度散点图}
+        \label{fig:imga}
+    \end{minipage}
+    \hfill % 两张图片之间的间距
+    % 第二张图片
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/5.1/yuchuliB.png} % 替换为你的图片路径
+        \caption{孕周数 - Y染色体浓度散点图}
+        \label{fig:imgb}
+    \end{minipage}
+\end{figure}
+我们首先对题目指明的BMI与孕周数两个指标进行分析，对相应数据数据进行筛选提取，分别作出其与Y染色体浓度的散点图\ref{fig:imga},\ref{fig:imgb}，该图显示 Y 浓度与孕周关系并非简单线性，后续将孕周作为主要平滑变量纳入模型以更准确刻画趋势。
+
+\subsubsection{聚类自助法计算带权Spearman相关系数}
+
+聚类自助法（Cluster Bootstrap）是一种在统计分析中用于处理数据聚类结构的重采样技术，核心是对数据中的聚类单元进行有放回地抽样，生成生成规模相当的重采样数据集，基于数据集重复执行分析后整合结果评估原数据集的稳定性，解决了传统聚类结果不稳定、可信度难评估的问题，最终输出更稳健、可解释的聚类结论，本文以孕妇为单位进行有放回抽样，完整保留抽中聚类单元内的全部观测值构建自助样本，并重复抽样 - 构键样本过程1000 次（本文设定），通过多次计算相关系数\ref{equ:spearman}得到得到相关系数 \(\{r_{s,b}^{(w)}\}_{b = 1}^{1000}\) 的总体分布，计算出置信区间、标准误等统计量， p 值按分布相对 0 的双尾概率给出。
+
+Spearman 相关系数（Spearman's Rank Correlation Coefficient）是一种非参数统计方法，用于衡量两个变量之间的单调相关关系，且对对极端值和测序误差噪声的敏感度较低。但由于同一孕妇有多次记录，普通Spearman相关系数检验未考虑组内观测值相关、组间独立的特性，计算出的 p 值会偏小。，考虑到数据记录有质量差异，用$w_i$ 加权能够抑制某些低质观测值的影响，据此，带权Spearman相关系数计算方式如下, 对两个变量 \( X, Y \) 做平均秩:
+\(R_X = \text{rank}(X), \quad R_Y = \text{rank}(Y).\) 带权 Spearman 相关系数为:
+\begin{equation}
+\label{equ:spearman}
+r_s^{(w)} = \frac{\sum_i w_i \left(R_{X,i} - \bar{R}_X^{(w)}\right)\left(R_{Y,i} - \bar{R}_Y^{(w)}\right)}{\sqrt{\sum_i w_i \left(R_{X,i} - \bar{R}_X^{(w)}\right)^2} \sqrt{\sum_i w_i \left(R_{Y,i} - \bar{R}_Y^{(w)}\right)^2}}.
+\end{equation}
+其中 \( \bar{R}^{(w)} = \frac{\sum w_i R_i}{\sum w_i} \), \( w_i \) 为质量权重; \( R_{X,i}, R_{Y,i} \) 为第 \( i \) 个观测的秩; \( \bar{R}_X^{(w)} \) 为 \( R_X \) 的加权均值。
+
+计算结果如表\ref{tab:cov}和图\ref{fig:image1991}、\ref{fig:image2002}所展示，Y染色体浓度和表\ref{tab:cov}中指标有关，结合p值，应优先选择 BMI、检测孕周、X 染色体浓度、18 号染色体 Z 值、在参考基因组上比对的比例等指标，这些变量与 Y 染色体浓度的关联经统计检验可靠,具有中等以上的相关线性强度，其中与18号染色体Z值、BMI、参考基因组比对比例来呈现负相关关系，与X染色体浓度、检测孕周呈现正相关关系，这些是模型的核心解释变量；可排除的无关变量：如 21 号染色体 GC 含量、GC 含量等，相关系数绝对值接近 0 且不显著，纳入模型会增加复杂度且无实际解释力。
+
+\begin{table}[htbp]
+  \centering
+  \caption{指标与相关系数表}
+  \begin{tabular}{llllll}
+    \toprule
+    指标 & 相关系数 & 指标 & 相关系数 & 指标 & 相关系数 \\
+    \midrule
+    \textbf{X 染色体浓度} & 0.464 & Y 染色体 Z 值 & 0.114 & 13 号染色体 Z 值 & -0.075 \\
+    \textbf{18 染色体 Z 值} & -0.176 & 重复读段比例 & 0.0690 & 18 号染色体 GC 含量 & -0.0098 \\
+    \textbf{孕妇 BMI} & -0.166 & 原始读段比例 & -0.0022 & X 染色体 Z 值 & -0.0518 \\
+    \textbf{参考基因组比对比例} & -0.155 & 过滤读段数比例 & 0.0092 & 13 号染色体 GC 含量 & -0.0354 \\
+    年龄 & -0.123 & \textbf{检测孕周} & 0.0819 & 21 号染色体 Z 值 & 0.0370 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    % 第一个 minipage，宽度设为文本宽度的 48%
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/5.1/Spearman.png} % 设置图片宽度与 minipage 相同
+        \caption{带权Spearman相关系数热力图}
+        \label{fig:image1991}
+    \end{minipage}\hfill % \hfill 用于填充两个 minipage 之间的空间，实现并排
+    % 第二个 minipage
+    \begin{minipage}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/5.1/P值.png}
+        \caption{p值热力图}
+        \label{fig:image2002}
+    \end{minipage}
+\end{figure}
+
+
+\subsubsection{广义可加混合模型（GAMM）构建}
+首先由于 Y 染色体浓度\(Y\in[0,1]\)，属于比例型数据，存在边界问题。采用 Smithson–Verkuilen 进行边界调整后logit变换:
+\begin{equation}
+Y^{*}=\frac{Y\cdot(n - 1)+0.5}{n}, \, \widetilde{Y} = logit \left( Y^* \right). 
+\end{equation}
+其中 n 为非缺失样本数.门槛\(y^{\dagger} = 4\%\)相应变换为在\(\eta^{\dagger} = \text{logit}\left( \frac{y^{\dagger}(n - 1) + 0.5}{n} \right).\)
+
+其次，强制包含孕周与 BMI，并在扩展模型中加入年龄。因为前期相关性分析已初步表明这些指标与 Y 染色体浓度相关，将其作为固定效应纳入模型，可量化它们对 Y 染色体浓度的影响。为提高模型收敛性，作中心化如下减去样本均值的中心化处理：
+\begin{equation}
+GA_c = GA - \overline{GA}, \,  BMI_c = BMI - \overline{BMI}, \, Age_c = Age - \overline{Age}. 
+\end{equation}
+最后还需引入孕妇层随机截距\(u_{0i}\sim N(0,\sigma_{u}^{2})\)，是因为同一孕妇的多次检测记录存在相关性，随机截距体现了不同孕妇之间的个体差异。综合以上考虑，本文建立如下广义可加混合模型:
+\begin{equation}
+\widetilde{Y}_{ij} = \alpha + f_1(GA_{c,ij}) + f_2(BMI_{c,ij}) + \beta_{Age}Age_{c,ij} + u_{0i} + \varepsilon_{ij}.
+\end{equation}
+其中\( f_1, f_2 \) 为自然三次样条\(f_k(x) = \sum_{\ell=1}^{d_k} \theta_{k\ell} b_{k\ell}(x), \quad k \in \{1, 2\}.\) 基函数纬度为$d_1,  \, d_2.$
+
+为了检验非线性模型的必要性，本文同时拟合了线性 LMM，模型形式为：
+\begin{equation}
+\widetilde{Y}_{ij} = \alpha + \beta_{GA}GA_{c,ij} + \beta_{BMI}BMI_{c,ij} + \beta_{Age}Age_{c,ij} + u_{0i} + \varepsilon_{ij}.
+\end{equation}
+其中\(f_{1}\)、\(f_{2}\)约束为线性。
+
+通过设定不同的自由度（\(d_{1},d_{2}\in\{4,5,6\}\times\{4,5,6\}\)），并采用网格搜索结合 AIC 准则\footnote{AIC（Akaike Information Criterion，赤池信息准则），是一种用于评估统计模型拟合优良性的标准。其定义公式为\[AIC = 2k - 2\log(L)\]，其中k是模型中参数的数量，L是似然函数值。AIC越小，模型拟合越优。}选择最优自由度，可使平滑函数既能充分拟合数据的非线性特征，又能避免过度拟合。
+
+\subsubsection{最大似然估计（ML）求解模型} 
+
+\textbf{似然函数构建}
+
+假设随机效应\(u_i\)和残差\(\epsilon_{ij}\)独立，观测数据的联合对数似然函数为：
+\begin{equation}
+    \ell(\theta) = \sum_{i=1}^m \ln\left[ \int \prod_{j=1}^{n_i} f(\text{logit}Y_{ij} \mid u_i; \theta) \cdot f(u_i; \sigma_u^2) \, du_i \right]
+\end{equation}
+其中：\(\theta = (\beta_0, \beta_1, \beta_2, \sigma_u^2, \sigma_\epsilon^2)\)为GAMM待估参数向量；\(f(\text{logit}Y_{ij} \mid u_i; \theta)\)为条件正态密度；\(f(u_i; \sigma_u^2)\)为随机效应的正态密度。
+
+\textbf{LBFGS 算法最大化对数似然}
+
+ML 的目标是找到使\(\ell(\theta)\)最大的参数\(\hat{\theta}\)：
+\[\hat{\theta} = \arg\max_{\theta} \ell(\theta).\]
+
+LBFGS 算法核心是通过近似 Hessian 矩阵指导参数更新。
+
+Step1) 梯度计算与Hessian矩阵近 在当前参数\(\theta_k\)处，计算对数似然函数的梯度：
+\begin{equation}
+g_k = \nabla \ell(\theta_k) = \left[ \frac{\partial \ell}{\partial \beta_0}, \frac{\partial \ell}{\partial \beta_1}, \frac{\partial \ell}{\partial \beta_2}, \frac{\partial \ell}{\partial \sigma_u^2}, \frac{\partial \ell}{\partial \sigma_\epsilon^2} \right]^T\end{equation}
+
+Step2）通过历史迭代信息参数更新量\(\Delta \theta_k = \theta_{k+1} - \theta_k\)和梯度变化\(\Delta g_k = g_{k+1} - g_k\)近似 Hessian 矩阵的逆\(H_k^{-1}\)：
+\[
+    H_{k+1}^{-1} = V_k^T H_k^{-1} V_k + \rho_k \Delta \theta_k \Delta \theta_k^T
+\]
+其中\(\rho_k = 1/(\Delta g_k^T \Delta \theta_k)\)，\(V_k\)为校正项。
+
+Step3）参数更新与收敛搜索方向 
+
+$\bullet$由近似的$H_k^{-1}$和梯度确定下降方向：
+\(d_k = H_k^{-1} g_k\)。
+
+$\bullet$步长选择：通过线性搜索确定步长\(\alpha_k\)，使\(\ell(\theta_k + \alpha_k d_k)\)增大。
+
+$\bullet$收敛判断：当梯度的\(L_2\)范数小于阈值（如\(10^{-5}\)）时停止迭代：
+\(\|g_k\| < \epsilon\)。
+
+\subsubsection{求解结果与显著性检验}
+
+我们对比了LMM和GMM两种模型的结果：
+
+LMM模型求解结果显示：\(Z \sim 1 + \text{GA}_c + \text{BMI}_c + \text{Age}_c\)，随机截距：孕妇，其边际 \(R^2 = 0.1609\)，条件 \(R^2 = 0.9230\)；随机截距方差 \(0.185\)，残差方差 \(0.0577\)，这说明固定效应（GA/BMI/ 年龄）解释了约 16\% 的总体变异，而加入个体差异后总体解释度很高；孕妇间的基线差异显著存在。效应方向：\(\beta_{\text{GA}} > 0\)（每 \(+1\) 周孕周提高 Y 的 logit，\(\text{OR} \approx 1.049\)）；\(\beta_{\text{BMI}} < 0\)（每 \(+1\) BMI 降低 Y 的 logit，\(\text{OR} \approx 0.973\)）。等效孕周：\(\theta = -\beta_{\text{BMI}} / \beta_{\text{GA}} \approx 0.575\) 周，意为 BMI 每增加 1 个单位，需顺延 \(\approx 0.58\) 周孕周才能抵消其负向影响（95\% CI 参见运行日志）。
+
+最优 GAMM：\(1 + \text{cr}(\text{GA}\_c, \text{df}=5) + \text{cr}(\text{BMI}\_c, \text{df}=6) + \text{Age}\_c\)。拟合优度：\(\ell = -363.980\)，\(\text{AIC}=755.96\)；相较线性 LMM（\(\ell = -391.555\)，\(\text{AIC}=793.11\)），改进显著（\(\text{LRT}=55.15\)，\(\text{df}=9\)，\(p=1.14 \times 10^{-8}\)）。这说明非线性项是必要的。
+
+通过似然比检验，可判断允许孕周与 BMI 呈平滑函数是否能显著提升模型拟合效果。表\ref{tab:model_comparison}展示了两组模型的对照结果，线性 LMM 的对数似然值\(log L=-412.004\)，\(AIC = 834.01\)； GAMM 的\(log L=-391.451\)，\(AIC = 806.90\)，计算得到似然比\footnote{\(LR = 2(log L_{GAMM}-log L_{LMM})\)}\(LR = 41.106\)，自由度\(df = 7\)，\(p=7.73\times10^{-7}\),远小于常用的显著性水平（p = 0.05），说明孕周与 BMI 呈平滑函数关系。因此，GAMM能显著提升模型拟合效果。
+\begin{table}[htbp]
+  \centering
+  \caption{模型比较结果}
+  \begin{tabular}{cccc}
+    \toprule
+    模型 & logL & AIC & LRT \\
+    \midrule
+    LMM & -412.004 & 834.01 & -- \\
+    GAMM & -391.451 & 806.90 & -- \\
+    \midrule
+    差异统计量 & -- & -- & LR = 41.106 ($df=7$, $p=7.73\times10^{-7}$) \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:model_comparison}
+\end{table}
+
+\subsubsection{结果可视化与解释}
+
+在分析某一变量对 Y 染色体浓度的影响时，将另一变量固定在中位数水平，可排除该变量的干扰，更清晰地展示单一变量对 Y 染色体浓度的独立影响，如图\ref{fig:BMI}与图\ref{fig:GA}所示，为了展示不确定性，图中添加了95\% 置信带，置信带越窄，说明模型在该区间的预测越准确。
+\begin{figure}[htbp]
+    \centering
+    % 左边图片，minipage 宽度设为 0.45\textwidth（可根据需要调整）
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/5.1/GAMM_partial_BMI.png} % 替换为你的第一张图片路径
+        \caption{自然样条 GAMM 的 BMI 部分效应}
+        \label{fig:GA}
+    \end{minipage}
+    \hfill % 用于在两个 minipage 之间添加水平间距，使它们分开展示
+    % 右边图片，minipage 宽度设为 0.45\textwidth
+    \begin{minipage}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/5.1/GAMM_partial_GA.png} % 替换为你的第二张图片路径
+        \caption{自然样条 GAMM 的孕周部分效应}
+        \label{fig:BMI}
+    \end{minipage}
+\end{figure}
+
+从整体上看， Y 染色体浓度随孕周上升而上升，曲线在 10–16 周上升更快，其后增幅趋缓，孕周的增加对 Y 染色体浓度的提升作用更明显，这为早检 + 必要复检的流程设计提供了定量依据，对于需要尽早检测但 Y 染色体浓度尚未达标的孕妇，可在中后期适当缩短复检间隔，以尽早得到 Y 染色体浓度达标的时点。在 BMI 指标方面：整体为负向，曲线接近线性, BMI 越高，胎儿 Y 染色体浓度越低，验证了 高 BMI 可能抑制 Y 染色体浓度升高这一临床经验，因此，高 BMI 群体选择更晚的检测时点，避免过早检测导致的结果不准确。

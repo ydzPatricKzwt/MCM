@@ -1,0 +1,114 @@
+\begin{lstlisting}
+
+###数据预处理_核心代码
+
+
+#软门控判定
+def qc_soft_flags(row, thr):
+    flags = []
+    O  = pd.to_numeric(row.get(COL_O),  errors="coerce")
+    M  = pd.to_numeric(row.get(COL_M),  errors="coerce")
+    N  = pd.to_numeric(row.get(COL_N),  errors="coerce")
+    AA = pd.to_numeric(row.get(COL_AA), errors="coerce")
+    P  = pd.to_numeric(row.get(COL_P),  errors="coerce")
+    GC13 = pd.to_numeric(row.get(COL_GC13), errors='coerce')
+    GC18 = pd.to_numeric(row.get(COL_GC18), errors='coerce')
+    GC21 = pd.to_numeric(row.get(COL_GC21), errors='coerce')
+
+    # 比率/计数
+    if (not np.isfinite(M)) or (M < thr['M5']):
+        flags.append("low_align(<M5)")
+    if (not np.isfinite(N)) or (N > thr['N95']):
+        flags.append("high_dup(>N95)")
+    if (not np.isfinite(AA)) or (AA > thr['AA95']):
+        flags.append("high_filtered(>AA95)")
+    if (not np.isfinite(O)) or (O < thr['O5']):
+        flags.append("low_unique(<O5)")
+
+    # 整体 GC
+    if (not np.isfinite(P)) or (P < thr['GC_LOW']):
+        flags.append("gc_overall_low(<P5)")
+    if np.isfinite(P) and (P > thr['GC_HIGH']):
+        flags.append("gc_overall_high(>0.60)")
+
+    # ΔGC
+    if np.isfinite(GC13) and np.isfinite(GC18) and np.isfinite(GC21) and np.isfinite(P):
+        for k, gck in [('13',GC13),('18',GC18),('21',GC21)]:
+            z = ((gck - P) - thr['mu_d'][k]) / (thr['sd_d'][k] + 1e-9)
+            if abs(z) > 3:
+                flags.append(f"deltaGC{k}_>|3sd|")
+                break
+    else:
+        flags.append("deltaGC_missing")
+
+    return flags
+
+# 对被软门控样本计算 Q 
+def compute_Q_for_flagged(row, thr, return_parts=False):
+    """返回 Q（及可选的各组成分）"""
+    def clip01(x): return np.minimum(1.0, np.maximum(0.0, x))
+    O  = pd.to_numeric(row.get(COL_O),  errors="coerce")
+    M  = pd.to_numeric(row.get(COL_M),  errors="coerce")
+    N  = pd.to_numeric(row.get(COL_N),  errors="coerce")
+    AA = pd.to_numeric(row.get(COL_AA), errors="coerce")
+    P  = pd.to_numeric(row.get(COL_P),  errors="coerce")
+    GC13 = pd.to_numeric(row.get(COL_GC13), errors='coerce')
+    GC18 = pd.to_numeric(row.get(COL_GC18), errors='coerce')
+    GC21 = pd.to_numeric(row.get(COL_GC21), errors='coerce')
+
+    # 分位区间（缺失兜底）
+    O5 = thr['O5']; O95 = O5 * 1.5 if np.isfinite(O5) else (O if np.isfinite(O) else 1.0)
+    M5 = thr['M5']; M95 = min(0.95, M5 + 0.15) if np.isfinite(M5) else 0.90
+    N5, N95 = 0.0, (thr['N95'] if np.isfinite(thr['N95']) else 0.04)
+    AA5, AA95 = 0.0, (thr['AA95'] if np.isfinite(thr['AA95']) else 0.04)
+    eps = 1e-9
+
+    f_reads = clip01((np.log10(max(O,1.0)) - np.log10(max(O5,1.0))) /
+                     (np.log10(max(O95, O5+1)) - np.log10(max(O5,1.0)) + eps)) if np.isfinite(O) and np.isfinite(O5) else 0.5
+    f_align = clip01((M - M5) / (M95 - M5 + eps)) if np.isfinite(M) and np.isfinite(M5) else 0.5
+    f_dup   = 1.0 - clip01((N - N5) / (N95 - N5 + eps)) if np.isfinite(N) and np.isfinite(N95) else 0.5
+    f_filt  = 1.0 - clip01((AA - AA5)/ (AA95- AA5+ eps)) if np.isfinite(AA) and np.isfinite(AA95) else 0.5
+
+    # 整体 GC：温和惩罚（0.6~1.0）
+    f_gc_overall = 1.0
+    if np.isfinite(P):
+        if P < thr['GC_LOW']:
+            P1 = thr['P1'] if np.isfinite(thr['P1']) else max(thr['GC_LOW'] - 0.02, 0.0)
+            span = max(thr['GC_LOW'] - P1, 1e-3)
+            frac = (P - P1) / span  # [0,1]
+            f_gc_overall = 0.6 + 0.4 * clip01(frac)
+        elif P > thr['GC_HIGH']:
+            P99 = thr['P99'] if np.isfinite(thr['P99']) else (thr['GC_HIGH'] + 0.02)
+            span = max(P99 - thr['GC_HIGH'], 1e-3)
+            frac = (P99 - P) / span
+            f_gc_overall = 0.6 + 0.4 * clip01(frac)
+        else:
+            f_gc_overall = 1.0
+
+    # ΔGC：取 13/18/21 的最小值
+    f_delta = 1.0
+    if np.isfinite(GC13) and np.isfinite(GC18) and np.isfinite(GC21) and np.isfinite(P):
+        f_list = []
+        for k, gck in [('13',GC13),('18',GC18),('21',GC21)]:
+            z = ((gck - P) - thr['mu_d'][k]) / (thr['sd_d'][k] + eps)
+            f_list.append(1.0 - min(1.0, abs(z)/3.0))
+        f_delta = min(f_list)
+
+    # 几何平均（读段/比对加倍权重）
+    prod = (f_reads**2) * (f_align**2) * f_dup * f_filt * f_gc_overall * f_delta
+    Q = float(max(prod ** (1/8), Q_FLOOR))
+
+    if return_parts:
+        return Q, dict(f_reads=f_reads, f_align=f_align, f_dup=f_dup, f_filt=f_filt,
+                       f_gc_overall=f_gc_overall, f_delta=f_delta)
+    return Q
+
+# 选“质量最好”的记录（同孕妇同一天仅保留一条）
+def pick_best_per_day(df):
+    # ΔGC 最大绝对偏差（tie-breaker）
+    d13 = pd.to_numeric(df[COL_GC13], errors='coerce') - pd.to_numeric(df[COL_P], errors='coerce')
+    d18 = pd.to_numeric(df[COL_GC18], errors='coerce') - pd.to_numeric(df[COL_P], errors='coerce')
+    d21 = pd.to_numeric(df[COL_GC21], errors='coerce') - pd.to_numeric(df[COL_P], errors='coerce')
+    df["_deltaGC_maxabs"] = pd.concat([d13.abs(), d18.abs(), d21.abs()], axis=1).max(axis=1)
+
+\end{lstlisting}

@@ -1,0 +1,103 @@
+问题四的核心目标是完成一个二分类任务，标签0代表染色体正常，1代表21/18/13号染色体非整倍体异常，本文综合考虑 X 染色体及目标染色体的 Z 值、GC 含量、读段数比例、孕妇 BMI 等多维度特征，基于机器学习模型构建女胎异常判断方法，解决数据不平衡、同一孕妇多检测记录等关键问题。
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=0.7\textwidth]{figures/5.4/mindmap.png}
+    \caption{问题四解决流程}
+    \label{fig:mindmap}
+\end{figure}   
+
+\subsubsection{数据预处理与探索性分析}
+
+\noindent $\bullet$ \textbf{特征筛选 }  排除标签列、ID 列等非数值列，仅保留Z 值、GC 含量、BMI、读段数等可量化的数值列同时过滤非空值比例$\geq$ 30\%” 的特征，从而去除冗余信息和低质量特征降低模型复杂度，提升泛化能力。
+
+\noindent $\bullet$ \textbf{缺失处理与标准化 } 对所有数值特征做中位数填充并标准化至零均值单位方差。避免均值填充对极端值敏感的缺点
+，同时保留特征的分布趋势。
+
+\noindent $\bullet$ \textbf{样本质量权重 } 由于本题异常样本数据偏少，可通过赋予其更高权重，让模型在训练时更重视异常样本，避免模型因正常样本多而造成偏差。若预处理阶段未给出权重时，置 \(w_{Q,i} = 1\)。训练时本文采用加权经验风险，评估时同时报告未加权与按 \(w_Q\) 加权两套指标，以体现样本质量差异对结论的影响。
+
+\begin{figure}[htbp]
+    \centering
+    % 第一张图片
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/5.4/01.png} % 替换为你的图片路径
+        \caption{13、18号染色体Z值热力图}
+        \label{fig:5.4.1}
+    \end{minipage}
+    \hfill % 两张图片之间的间距
+    % 第二张图片
+    \begin{minipage}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{figures/5.4/02.png} % 替换为你的图片路径
+        \caption{GC浓度多面板直方图}
+        \label{fig:5.4.2}
+    \end{minipage}
+\end{figure}
+热力图\ref{fig:5.4.1}展示了女胎孕妇 13 号和 21 号染色体 Z 值的二维分布特征。由图可知大部分样本集中在 Z 值±2 范围内的正常区域，符合标准正态分布特征。红色虚线标记±2.5 异常阈值，显示异常样本主要分布在四个象限的边缘区域。正常染色体的 Z 值分布在原点附近，为后续异常判定模型提供了重要的数据基础。GC 含量分布分析图\ref{fig:5.4.2}展示了三个关键染色体的 GC 含量分布特征。13 号染色体 GC含量主要分布在 0.37-0.39 区间，18 号染色体分布在 0.38-0.40 区间，21 号染色体分布在 0.39-0.42 区间。灰色阴影区域标记了0.4\~ 0.6这一正常 GC 含量范围，各染色体 GC 含量的差异分布为异常判定提供了重要的质量控制指标。
+
+
+\subsubsection{分组切分数据与重采样策略 }
+
+同一孕妇的多次检测若被拆分到训练/测试两侧，会因模型见过该孕妇的分布特征而抬高测试指标。为此我们按孕妇代码做分组随机切分，避免信息泄露。对同一孕妇的多个样本，取多数类标签（如某孕妇 3 次检测中 2 次为正常，则该孕妇的标签为 “正常”）作为分层依据。接着，按孕妇的聚合标签分层抽样，确保训练集 / 测试集的异常率 与原数据保持一致。
+
+本体异常样本数据稀少，若直接训练模型，模型会偏向预测正常，准确率高但召回率低，导致漏检异常胎儿，为此，本文通过重采样策略平衡类别分布。我们在训练集内部对比以下重采样：随机过采样、随机欠采样、SMOTE、Borderline-SMOTE、SMOTEENN。
+为避免同一孕妇跨集合的信息泄漏，采用 GroupKFold/按孕妇代码分组 的切分方式。重采样仅在训练折内部执行，验证折与测试集保持原始分布不做重采样。分组与加权口径见综合分析报告“按孕妇分组”“使用样本权重(w\_Q)”说明。
+
+\subsubsection{分类器}
+
+本文使用两种集成学习模型（GBDT 梯度提升决策树、AdaBoost 自适应提升），基于不同重采样数据集训练模型，输出对异常的后验概率估计 \(\hat{p}_i\)，使用网格搜索遍历树数量、树深度等参数网格，以加权 AUC为评分指标，筛选最优模型参数。
+
+\noindent $\bullet$ \textbf{梯度提升树（GBDT）} 通过迭代训练多棵弱决策树，每棵树拟合前序模型的 残差，最终通过加权投票输出预测结果。其损失函数通常为对数损失，数学上通过梯度下降最小化损失。
+
+\noindent $\bullet$ \textbf{自适应增强（AdaBoost）} 通过迭代调整样本权重，错分样本权重增加，正确样本权重减少，每棵树基于加权样本训练，最终通过树的性能权重输出预测结果。
+
+\noindent $\bullet$ \textbf{预测性能评价指标} 传统交叉验证（如 KFold）可能将同一孕妇的样本分到不同折，导致模型在验证集上的性能偏高，为了合理评估模型性能，本文采取GroupKFold 方法，通过 分组约束 确保验证集的样本与训练集无关联，评估结果更合理。预测性能指标是衡量一个模型好坏的关键，本文采用的预测性能指标包括AUC、AP、准确率、精确率、召回率、F1、特异度、Brier分数。为了平衡异常样本，各指标计算均作加权处理。
+
+\noindent $\bullet$ \textbf{模型选择 } 超参数选择采用自定义加权交叉验证：在 GroupKFold 的每个验证折上获得 out-of-fold 概率 \(\hat{p}\)，用加权指标\(\text{ROC-AUC}_w = \text{roc\_auc\_score}(y, \hat{p}, \text{sample\_weight} = w), 
+\text{AP}_w = \text{average\_precision}(y, \hat{p}, \text{sample\_weight} = w) \)
+以及 \(\text{Brier}_w = \frac{\sum w_i (\hat{p}_i - y_i)^2}{\sum w_i}\)、\(\text{F1}_w\) 等进行评分，用同一套加权指标确定最优模型与阈值 \(\tau^*\)。最终测试集只评估一次，沿用验证集确定的 \(\tau^*\)。
+
+\subsubsection{结果与可视化}
+
+如图\ref{fig:4.04}比较了多种重采样策略，五张对比图里，几乎所有指标在 SMOTEENN 上都明显领先（AUC≈1、F1≈0.92–0.94、Recall≈0.96–0.98、MCC≈0.82–0.85），故将其作为首选方案。
+
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/5.4/03.png}
+    \caption{重采样策略下模型表现}
+    \label{fig:4.04}
+\end{figure}
+
+最优组合如表\ref{tab:best}所示，若以筛查为目标，以少漏检为优先，则选 SMOTEENN + AdaBoost。它在测试集上 Recall≈0.976、F1≈0.936、Precision≈0.899、MCC≈0.854、AUC≈0.974、AP≈0.976，召回和 F1 都是最强，若以风险排序/打分为主,则选 SMOTEENN + GradientBoosting。它的 AUC≈0.986、AP≈0.990 为全局最佳，排序与区分能力最强；阈值后移也能得到与 AdaBoost 接近的召回。对于 NIPT 这类宁可复检也不能漏检的场景，应当选择SMOTEENN+AdaBoost。
+
+\begin{table}[htbp]
+  \centering
+  \caption{最优模型组合}
+  \label{tab:best}
+  \begin{tabular}{cccccccc}
+    \toprule
+    重采样 & 模型 & Set & ACC & Prec & 召回率 & F1 & AUC \\
+    \midrule
+    Smoteenn & GradientBoosting & 测试集 & 0.910 & 0.883 & 0.961 & 0.922 & 0.986 \\
+    Smoteenn & GradientBoosting & 训练集 & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+    Smoteenn & AdaBoost & 训练集 & 0.993 & 0.991 & 0.996 & 0.993 & 0.998 \\
+    Smoteenn & AdaBoost & 测试集 & 0.926 & 0.899 & 0.976 & 0.936 & 0.974 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+图\ref{fig:roc}对比了六种重采样方式与两类树模型的组合效果。其中 SMOTEENN 明显最优: AUC 分别约 0.986（GradientBoosting）与 0.974（AdaBoost），说明在考虑样本质量权重后仍能把阳性与阴性高度区分。SMOTE 与 Borderline-SMOTE 已比原始数据效果好，AUC 约 0.86–0.91，表明仅靠过采样的几何插值就能缓解不平衡带来的学习偏置，但它们的曲线在中高 FPR 区域仍有下垂，提示边界仍混有噪声。Original 的 AUC 只有 0.83–0.86，不平衡与噪声都未处理；Random undersample 因丢失多数类信息，AUC 仅 0.71–0.73；Random oversample 最弱，AUC 约 0.60–0.62，曲线接近对角线，易过拟合复制样本而对真实分布泛化差。
+\begin{figure}[htpb]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/5.4/roc.png}
+    \caption{加权ROC曲线}
+    \label{fig:roc}
+\end{figure}
+
+最佳模型计算出来的特征重要性如图\ref{fig:5.4.00}展示，共筛选选了10个在染色体异常判定排名靠前的因素。女性无Y性染色体，其X染色体浓度的特征重要性较高，远超位列第二的重读段的比例，除此之外，剩余的八个因素包括年龄、孕妇BMI，体重，参考基因比例，测序质量考量计数，X染色体Z值，GC含量与身高，他们的重要性相互接近，且水平较低。这种特征重要性模式为临床检测提供了关键指标的优先级排序参考意见。
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/5.4/00.png}
+    \caption{特征重要性}
+    \label{fig:5.4.00}
+\end{figure}

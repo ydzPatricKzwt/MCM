@@ -1,0 +1,18 @@
+%begin{compactitem}
+%    \item 同一孕妇的多次检测具有相关性，采用随机截距刻画个体差异；\\
+%    \item \( Y \in [0,1] \) 为比例型，先做 Smithson - Verkuilen 微调后取 logit；\\
+%    \item 孕周、BMI 对 \( Y \) 的影响允许为平滑函数（自然三次样条），年龄作为线性协变量控制；\\
+%    \item 观测误差在 logit 尺度上近似正态且方差齐性；\\
+%
+ %   \item 同一孕妇的多次检测中，测序平台的检测精度保持一致，无因仪器校准偏差导致的批次效应
+ %   \item Y 染色体浓度检测值与真实值的偏差（残差\(\varepsilon_{ij}\)）、孕妇个体差异导致的 Y 浓度波动（随机截距\(u_{0i}\)）均服从正态分布，即\(\varepsilon_{ij} \sim N(0,\sigma_{\varepsilon}^2)\)、\(u_{0i} \sim N(0,\sigma_{u}^2)\)，且两者相互独立
+%\end{compactitem}
+
+\begin{compactitem}
+    \item 同一孕妇的多次检测中，测序平台的检测精度保持一致，无因仪器校准偏差导致的批次效应;
+    \item Y 染色体浓度检测值与真实值的偏差（残差\(\varepsilon_{ij}\)）、孕妇个体差异导致的 Y 浓度波动（随机截距\(u_{0i}\)）均服从正态分布，即\(\varepsilon_{ij} \sim N(0,\sigma_{\varepsilon}^2)\)、\(u_{0i} \sim N(0,\sigma_{u}^2)\)，且两者相互独立；
+    \item 在足够窄的BMI区间内，${T_i}$近似服从正态分布且可按权重 $w$ 估计段内参数；
+    \item  在误差修正过程中，所有孕妇的测量误差方差结构一致。
+\end{compactitem}
+
+

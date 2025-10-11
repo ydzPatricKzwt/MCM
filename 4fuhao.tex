@@ -1,0 +1,53 @@
+
+%\begin{table}[htbp]
+%  \centering
+%  \caption{符号与含义说明}
+%  \begin{tabular}{ll}
+%    \toprule
+%    符号/表达式 & 含义说明 \\
+%    \midrule
+%    \( Y_{ij} \) & 第 \( i \) 位孕妇第 \( j \) 次检测的 \( Y \) 浓度 \\
+%    \( Y_{ij}^\star = \frac{Y_{ij}(n - 1) + 0.5}{n} \) & 比例边界调整后的 \( Y \) 浓度（用于处理比例型数据的边界问题） \\
+%    \( \widetilde{Y}_{ij} = \text{logit}(Y_{ij}^\star) \) & 对调整后的 \( Y_{ij}^\star \) 进行 logit 变换后的值 \\
+%    \( GA_{ij} \)、\( BMI_{ij} \)、\( Age_{ij} \) & 分别为第 \( i \) 位孕妇第 \( j \) 次检测时的孕周、BMI、年龄 \\
+%    \midrule
+%    \(T_i\)  & 首次达标时间, Y 染色体浓度首次$\geq$ 4\% 的孕周  \\
+%    \(w(t)\) & 风险权重，通过分段函数量化的不同孕周的治疗风险\\
+%    \bottomrule
+%  \end{tabular}
+%\end{table}
+%
+%\(i = 1, \dots, N\)：孕妇索引；\(j = 1, \dots, m_i\)：第 i 位孕妇第 j 次检测。\(\text{ID}_i\)：孕妇代码；\(\text{BMI}_i\)：孕妇 BMI（取首检的 BMI）。\(t_{ij} \in \mathbb{R}_+\)：第 i 位孕妇第 j 次检测的孕周（单位：周；将 “周 + 天” 统一为十进制周）。\(y_{ij} \in [0, 1]\)：同次检测的 Y 染色体浓度。\(n(t) = \text{logit}\{y(t)\} = \ln \frac{y(t)}{1 - y(t)}\)：logit 变换。首次达标时间（个体层）\(T_i = \inf\{ t: y_i(t) \geq y^{\dagger} \} \quad \text{（单位：周）}.\)若一直未达标，则 \(T_i\) 记为 “大于最后观测时点” 的一个右界。组内记号：将 BMI 轴切成 G 个连续区间\(\mathcal{I}_g = [c_{g - 1}, c_g), \quad g = 1, \dots, G, \quad c_0 = -\infty < c_1 < \cdots < c_G = +\infty,\)第 g 组的样本集 \(S_g = \{i: \text{BMI}_i \in \mathcal{I}_g\}\)，样本量 \(n_g = |S_g|\)。
+%
+%样本：孕妇 \(i = 1, \dots, N\)。本次运行 \(N = 267\)，总检测记录 1082。时间变量：检测孕周 \(t \in \mathbb{R}_+\)；本文以步长 \(\Delta t = 0.25\) 周构建网格 \(\mathcal{T} = \{0, 0.25, \dots, 40\}\)。指标：\(Y_i(t) \in [0, 1]\)：第 i 位孕妇在孕周 t 的 Y 染色体浓度（比例）。\(Z_i(t) = \mathbf{1}\{Y_i(t) \geq y^{\dagger}\}\)：时刻达标指示。协变量：\(\text{BMI}_i\)（首检 BMI），\(\text{Age}_i\)、\(\text{Ht}_i\)、\(\text{Wt}_i\)。策略（需输出）：把 BMI 轴切为 G 个连续区间
+%\(\mathcal{I}_g = [c_{g - 1}, c_g), \quad g = 1, \dots, G, \quad c_0 = -\infty < c_1 < \cdots < c_G = +\infty,\)
+%并为每组给出首检时点 \(t_g \in [10, 25]\)。
+%
+%
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.5}
+    \begin{tabular}{@{}>{\centering\arraybackslash}m{0.25\textwidth}m{0.8\textwidth}@{}}
+        \toprule
+        符号 & 定义说明 \\
+        \midrule
+        $i = 1,\ldots,N$ & 孕妇个体索引，$N$ 为样本个体数 \\
+        $j = 1,\ldots,m_i$ & 第 $i$ 个个体的检测索引，$m_i$ 为检测次数 \\
+        $t_{ij}$ & 第 $i$ 个体第 $j$ 次检测的孕周 \\
+        $b_{ij}$ & 对应检测时的 BMI；以该个体首次检测的 BMI 作为该人的代表 BMI，记为 $b_i$ \\
+        $y_{ij} \in (0,1)$ & 对应检测的 Y 染色体浓度（比例） \\
+        $\tau$ & 达标阈值，设定为 $\tau = 0.04$ \\
+        $w_{Q,ij} $ &  某次检测的质量权重 \\
+        $w_i = \sum_{j=1}^{m_i} w_{Q,ij}$ & 个体权重 \\
+        $T_i$ & 个体最早达标时间 \\
+        $\mathcal{G} = \{G_1,\ldots,G_K\}$ & 按 BMI 把样本分成 $K$ 个相邻分段，组内样本索引集合为 $G_g$ \\
+        $\widehat{F}_g(t)$ & 组 $g$ 内 $T_i$ 的加权核化经验 CDF \\
+        $R_g(t)$ & 在时点 $t$ 进行 NIPT 的组别风险函数 \\
+        $t_g^*$ & 组 $g$ 的最优 NIPT 时点 \\
+        $t_{g,\text{err}}^*$ & 在误差修正后的最优时点$^{[9]}$\\
+        \bottomrule
+    \end{tabular}
+    \label{tab:variable_definitions}
+\end{table}
+
+

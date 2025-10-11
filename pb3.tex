@@ -1,0 +1,178 @@
+\begin{lstlisting}
+
+###问题3_核心代码
+
+
+
+#拟合 GAMM
+def fit_gamm(df):
+    def sv(y):
+        y = np.clip(y, 0, 1); n = np.isfinite(y).sum()
+        return (y*(n-1)+0.5)/max(n,1)
+
+    work = df.copy()
+    work["GA"]  = work[COL_GA]
+    work["BMI"] = work[COL_BMI]
+    if COL_AGE in work.columns: work["Age"] = work[COL_AGE]
+    if COL_HT  in work.columns: work["Ht"]  = work[COL_HT]
+    if COL_WT  in work.columns: work["Wt"]  = work[COL_WT]
+
+    work, beta_hw = hw_orthogonalize(work) 
+
+    work["Y_star"] = sv(work[COL_Y].values)
+    work["logitY"] = np.log(work["Y_star"]/(1.0 - work["Y_star"]))
+    work["GA_c"]   = work["GA"]  - work["GA"].mean()
+    work["BMI_c"]  = work["BMI"] - work["BMI"].mean()
+    work["rHT_c"]  = work["rHT"] - work["rHT"].mean()
+    work["rWT_c"]  = work["rWT"] - work["rWT"].mean()
+    if "Age" in work.columns: work["Age_c"] = work["Age"] - work["Age"].mean()
+
+    formula = f"1 + cr(GA_c, df={DF_GA}) * cr(BMI_c, df={DF_BMI})" \
+              f" + cr(rHT_c, df={DF_RHT}) + cr(rWT_c, df={DF_RWT})"
+    if "Age_c" in work.columns:
+        formula += f" + cr(Age_c, df={DF_AGE})"
+
+    try:
+        X = dmatrix(formula, work, return_type="dataframe")
+        md = sm.MixedLM(work["logitY"].values, X.values,
+                        groups=work[COL_ID].astype(str).values,
+                        exog_re=np.ones((len(work),1)))
+        res = md.fit(reml=False, method="lbfgs")
+    except Exception as e:
+        raise RuntimeError(f"GAMM 拟合失败：{e}\n公式：{formula}")
+
+    resid_var = float(res.scale)
+    try:
+        group_var = float(res.cov_re.iloc[0,0]) if hasattr(res,"cov_re") else float(res.cov_re[0,0])
+    except Exception:
+        group_var = float(np.squeeze(np.array(res.cov_re)))
+
+    print(f"[GAMM] 公式：{formula}")
+    print(f"[GAMM] 残差方差={resid_var:.4f}，组方差={group_var:.4f}")
+    return res, X.design_info, work, resid_var, group_var, beta_hw
+
+
+#构造个体F_i(t)
+def build_F_from_gamm(sub, res, design_info, work, t_grid, beta_hw):
+    GA_mean  = work["GA"].mean()
+    BMI_mean = work["BMI"].mean()
+    Age_mean = work["Age"].mean() if "Age" in work.columns else None
+    rHT_mean = work["rHT"].mean()
+    rWT_mean = work["rWT"].mean()
+    thr = logit(Y_THRESH)
+
+    N = len(sub); T = len(t_grid)
+    F_mat = np.zeros((N, T), dtype=float)
+
+    for idx, row in enumerate(sub.itertuples(index=False)):
+        bmi0 = getattr(row, "BMI0")
+        age0 = getattr(row, COL_AGE) if (COL_AGE in sub.columns) else None
+        ht0  = getattr(row, COL_HT)  if (COL_HT  in sub.columns) else None
+        wt0  = getattr(row, COL_WT)  if (COL_WT  in sub.columns) else None
+
+        rht_vec, rwt_vec = hw_orth_apply(bmi0, ht0, wt0, beta_hw, len(t_grid))
+
+        new = {
+            "GA_c":  (t_grid - GA_mean),
+            "BMI_c": np.full_like(t_grid, bmi0 - BMI_mean),
+            "rHT_c": (rht_vec - rHT_mean),
+            "rWT_c": (rwt_vec - rWT_mean)
+        }
+        if "Age" in work.columns:
+            new["Age_c"] = np.full_like(t_grid, (age0 if age0 is not None else Age_mean) - Age_mean)
+
+        mu = predict_mu(design_info, res, new)
+        p  = inv_logit(mu - thr)
+        F  = np.maximum.accumulate(np.clip(p, 0.0, 1.0))
+        F_mat[idx,:] = F
+    return F_mat
+
+
+#DP（风险段成本）
+def build_time_grid():
+    t0 = 0.0
+    t_grid = np.arange(t0, T_MAX + 1e-9, DT)
+    t_candidates = np.arange(WIN_MIN, WIN_MAX + 1e-9, DT)
+    idx = lambda t: int(round((t - t0)/DT))
+    tk_index = {}
+    for t in t_candidates:
+        items = []
+        tk = t; prev = 0.0
+        while tk <= T_MAX + 1e-9:
+            items.append((idx(tk), idx(prev), stage_weight(tk)))
+            prev = tk; tk += DELTA
+        tk_index[t] = items
+    return t_grid, t_candidates, tk_index
+
+
+def dp_partition_risk(sub_sorted, F_sorted, t_grid, t_candidates, tk_index,
+                      gmax=G_MAX, nmin=N_MIN_GROUP, gamma=GAMMA_STRUCT):
+    N, T = F_sorted.shape
+    prefix = np.vstack([np.zeros((1,T)), np.cumsum(F_sorted, axis=0)])
+    def seg_sum(i,j,ti): return prefix[j+1,ti] - prefix[i,ti]
+
+    INF = 1e100
+    cost = np.full((N,N), np.inf, float)
+    tstar_idx = np.full((N,N), -1, int)
+
+    for i in range(N):
+        for j in range(i,N):
+            if (j-i+1) < nmin: continue
+            best_val = INF; best_idx = -1
+            n_g = (j-i+1)
+            for t in t_candidates:
+                acc = 0.0
+                for (it, ip, wt) in tk_index[t]:
+                    acc += wt * (seg_sum(i,j,it) - seg_sum(i,j,ip))
+                it0 = int(round((t-0.0)/DT))
+                acc += (1.0 - seg_sum(i,j,it0)/max(n_g,1)) * n_g * LAMBDA_FAIL
+                if acc < best_val:
+                    best_val = acc; best_idx = it0
+            cost[i,j] = best_val; tstar_idx[i,j] = best_idx
+
+    DP = np.full((gmax+1, N), INF, float); PREV = np.full((gmax+1, N), -1, int)
+    for j in range(N): DP[1,j] = cost[0,j]; PREV[1,j] = -1
+    for k in range(2,gmax+1):
+        for j in range(k-1,N):
+            best=INF; best_i=-1
+            for i in range(k-1,j+1):
+                v = DP[k-1,i-1] + cost[i,j]
+                if v < best: best=v; best_i=i
+            DP[k,j]=best; PREV[k,j]=best_i
+
+    logN = np.log(N)
+    crit_list=[]
+    for k in range(1,gmax+1):
+        raw = DP[k,N-1]; pen = gamma*(k-1)*logN
+        crit_list.append((k, raw, raw+pen))
+        print(f"  k={k}: 原始成本={raw:.2f}, 惩罚={pen:.2f}, 总准则={raw+pen:.2f}")
+    best_k, _, _ = min(crit_list, key=lambda x: x[2])
+
+    segs=[]; j=N-1; k=best_k
+    while k>=1:
+        i=PREV[k,j]; i=0 if i==-1 else i
+        segs.append((i,j)); j=i-1; k-=1
+    segs=list(reversed(segs))
+    return best_k, segs, crit_list, cost, tstar_idx
+
+
+def summarize_groups(sub_sorted, F_sorted, segs, t_grid, tstar_idx, tk_index):
+    rows=[]
+    for g,(s,e) in enumerate(segs, start=1):
+        it=tstar_idx[s,e]; t_star=t_grid[it]
+        Fg = F_sorted[s:e+1,:]
+        one_shot=float(Fg[:,it].mean()); retest=1.0-one_shot
+        A=Fg.sum(axis=0); acc=0.0
+        for (itk, ip, wt) in tk_index[t_star]:
+            acc += wt*(A[itk]-A[ip])
+        acc += (1.0 - A[it]/max((e-s+1),1))*(e-s+1)*LAMBDA_FAIL
+        rows.append({
+            "组别":g, "人数":(e-s+1),
+            "BMI下界":float(sub_sorted["BMI0"].iloc[s]),
+            "BMI上界":float(sub_sorted["BMI0"].iloc[e]),
+            "最佳检测时点(周)":float(t_star),
+            "一次达标率":one_shot, "重测率":retest, "风险值":float(acc)
+        })
+    return pd.DataFrame(rows)
+
+\end{lstlisting}

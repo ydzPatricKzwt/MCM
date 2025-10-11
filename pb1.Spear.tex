@@ -1,0 +1,296 @@
+\begin{lstlisting}
+
+import pandas as pd
+import numpy as np
+from scipy import stats
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings, time
+from tqdm import tqdm
+warnings.filterwarnings('ignore')
+plt.rcParams['font.sans-serif'] = ['SimHei']
+plt.rcParams['axes.unicode_minus'] = False
+
+
+# 带权Spearman：秩→加权Pearson
+def weighted_spearmanr(x, y, w):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    w = np.asarray(w, dtype=float)
+
+    mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(w) & (w > 0)
+    if mask.sum() <= 2:
+        return np.nan
+
+    xr = stats.rankdata(x[mask], method='average')
+    yr = stats.rankdata(y[mask], method='average')
+    ww = w[mask]
+
+    ww_sum = ww.sum()
+    if ww_sum <= 0:
+        return np.nan
+
+    def wmean(arr, ww): return (ww * arr).sum() / ww_sum
+    xbar = wmean(xr, ww)
+    ybar = wmean(yr, ww)
+    xc = xr - xbar
+    yc = yr - ybar
+
+    cov_w = (ww * xc * yc).sum() / ww_sum
+    varx = (ww * xc * xc).sum() / ww_sum
+    vary = (ww * yc * yc).sum() / ww_sum
+    if varx <= 0 or vary <= 0:
+        return np.nan
+    return cov_w / np.sqrt(varx * vary)
+
+#聚类自助法+带权Spearman
+def cluster_bootstrap_weighted_spearman(
+    data, col1, col2, cluster_col, weight_col,
+    n_bootstrap=1000, confidence_level=0.95, random_state=None
+):
+    valid = ~(data[col1].isna() | data[col2].isna())
+    if weight_col in data.columns:
+        w = pd.to_numeric(data[weight_col], errors='coerce').fillna(0.0)
+    else:
+        w = pd.Series(1.0, index=data.index)
+
+    original_corr = weighted_spearmanr(data.loc[valid, col1], data.loc[valid, col2], w.loc[valid])
+
+    uniq = data[cluster_col].astype(str).unique()
+    n_clusters = len(uniq)
+    cluster_dict = {}
+    for c in uniq:
+        sub = data[data[cluster_col].astype(str) == str(c)][[col1, col2]].copy()
+        sub['__w__'] = w.loc[sub.index].values
+        cluster_dict[c] = sub.values  # shape: (n_i, 3)
+
+    rng = np.random.default_rng(random_state)
+    boot_corrs = np.zeros(n_bootstrap, dtype=float)
+    valid_count = 0
+
+    for i in range(n_bootstrap):
+        # 有放回抽簇
+        picked = rng.choice(uniq, size=n_clusters, replace=True)
+        parts = [cluster_dict[c] for c in picked if c in cluster_dict]
+        if not parts:
+            continue
+        samp = np.vstack(parts)  # [:,0]=col1, [:,1]=col2, [:,2]=w
+        x, y, ww = samp[:, 0], samp[:, 1], samp[:, 2]
+        corr = weighted_spearmanr(x, y, ww)
+        if np.isfinite(corr):
+            boot_corrs[valid_count] = corr
+            valid_count += 1
+
+    if valid_count == 0:
+        return dict(correlation=original_corr, p_value=np.nan, ci_lower=np.nan,
+                    ci_upper=np.nan, se=np.nan, n_bootstrap=0)
+
+    boot_corrs = boot_corrs[:valid_count]
+    se = float(np.std(boot_corrs))
+    alpha = 1 - confidence_level
+    ci_lower = float(np.percentile(boot_corrs, alpha/2 * 100))
+    ci_upper = float(np.percentile(boot_corrs, (1 - alpha/2) * 100))
+
+    # 简单双尾p值：看自助分布相对于0的尾部概率
+    if original_corr >= 0:
+        p_value = 2 * np.mean(boot_corrs <= 0)
+    else:
+        p_value = 2 * np.mean(boot_corrs >= 0)
+    p_value = float(min(1.0, max(0.0, p_value)))
+
+    return dict(
+        correlation=float(original_corr),
+        p_value=p_value,
+        ci_lower=ci_lower,
+        ci_upper=ci_upper,
+        se=se,
+        n_bootstrap=int(valid_count)
+    )
+
+
+def main():
+    df, used_path, used_sheet ,last_err= None, None, None,None
+    df = pd.read_excel("附件-男胎检测数据-处理.xlsx")
+
+    #权重列
+    weight_col = 'w_Q'
+    if weight_col not in df.columns:
+        print("警告：未找到 w_Q 列，默认权重=1")
+        df[weight_col] = 1.0
+    df[weight_col] = pd.to_numeric(df[weight_col], errors='coerce').fillna(1.0).clip(lower=0)
+
+    columns_to_analyze = [
+        '年龄','检测孕周','孕妇BMI','原始读段数','在参考基因组上比对的比例','重复读段的比例',
+        '唯一比对的读段数','GC含量','13号染色体的Z值','18号染色体的Z值','21号染色体的Z值',
+        'X染色体的Z值','Y染色体的Z值','Y染色体浓度','X染色体浓度',
+        '13号染色体的GC含量','18号染色体的GC含量','21号染色体的GC含量','被过滤掉读段数的比例'
+    ]
+    exists = [c for c in columns_to_analyze if c in df.columns]
+    if len(exists) < len(columns_to_analyze):
+        missing = sorted(set(columns_to_analyze) - set(exists))
+        print(f"提示：以下列不存在，将自动忽略：{missing}")
+    columns_to_analyze = exists
+    
+    #聚类列
+    cluster_col = '孕妇代码'
+    if cluster_col not in df.columns:
+        for cand in ['孕妇ID','孕妇编号','ID','编号','代码']:
+            if cand in df.columns:
+                cluster_col = cand
+                break
+        else:
+            print("未找到聚类标识列，将使用索引创建虚拟簇")
+            df[cluster_col] = df.index
+
+    #只取需要的列 + 转数值
+    data = df[columns_to_analyze + [cluster_col, weight_col]].copy()
+    for c in columns_to_analyze:
+        data[c] = pd.to_numeric(data[c], errors='coerce')
+
+    uniq = data[cluster_col].nunique()
+    total = len(data)
+    print(f"独立孕妇数: {uniq}；总观察数: {total}；平均每孕妇检测次数: {total/uniq:.2f}")
+    print("缺失值统计：")
+    print(data[columns_to_analyze].isnull().sum())
+
+    n_bootstrap = 1000
+    print(f"\n开始带权聚类自助法（B={n_bootstrap}）…\n")
+
+    n_vars = len(columns_to_analyze)
+    corrM = np.zeros((n_vars, n_vars)); pM = np.zeros_like(corrM)
+    loM = np.zeros_like(corrM); upM = np.zeros_like(corrM)
+    seM = np.zeros_like(corrM)
+
+    start = time.time()
+    tot_pairs = n_vars * (n_vars + 1) // 2
+    with tqdm(total=tot_pairs, desc="计算进度") as pbar:
+        for i, c1 in enumerate(columns_to_analyze):
+            for j in range(i, n_vars):
+                c2 = columns_to_analyze[j]
+                if i == j:
+                    corrM[i,j]=1.0; pM[i,j]=0.0; loM[i,j]=1.0
+                    upM[i,j]=1.0; seM[i,j]=0.0
+                else:
+                    res = cluster_bootstrap_weighted_spearman(
+                        data, c1, c2, cluster_col, weight_col,
+                        n_bootstrap=n_bootstrap, confidence_level=0.95
+                    )
+                    corrM[i,j]=corrM[j,i]=res['correlation']
+                    pM[i,j]=pM[j,i]=res['p_value']
+                    loM[i,j]=loM[j,i]=res['ci_lower']
+                    upM[i,j]=upM[j,i]=res['ci_upper']
+                    seM[i,j]=seM[j,i]=res['se']
+                pbar.update(1)
+    dur = time.time() - start
+    print(f"\n完成！用时 {dur:.1f}s")
+
+    #输出与可视化
+    spearman_df = pd.DataFrame(corrM, index=columns_to_analyze, 
+                               columns=columns_to_analyze)
+    p_df = pd.DataFrame(pM,    index=columns_to_analyze, 
+                               columns=columns_to_analyze)
+    lo_df = pd.DataFrame(loM,   index=columns_to_analyze, 
+                               columns=columns_to_analyze)
+    up_df = pd.DataFrame(upM,   index=columns_to_analyze, 
+                               columns=columns_to_analyze)
+    se_df = pd.DataFrame(seM,   index=columns_to_analyze, 
+                               columns=columns_to_analyze)
+
+    sig_df = pd.DataFrame(index=columns_to_analyze, columns=columns_to_analyze)
+    for i in range(n_vars):
+        for j in range(n_vars):
+            if i==j: sig_df.iloc[i,j]='-'; continue
+            pv=pM[i,j]
+            if np.isnan(pv): sig='NA'
+            elif pv<1e-3: sig='***'
+            elif pv<1e-2: sig='**'
+            elif pv<5e-2: sig='*'
+            else: sig='ns'
+            sig_df.iloc[i,j]=sig
+
+    #保存
+    with pd.ExcelWriter('聚类自助法_斯皮尔曼相关分析结果_带权.xlsx', engine='openpyxl') as w:
+        info = pd.DataFrame({
+            '项目':['分析方法','是否使用权重',
+                  '权重列','独立孕妇数','总观察数',
+                  'Bootstrap次数','置信水平','计算用时(秒)',
+                  '数据文件','工作表'],
+            '值'  :['Cluster Bootstrap + Weighted Spearman',
+                   '是','w_Q',uniq,total,n_bootstrap,'95%',
+                   f'{dur:.1f}',used_path,used_sheet]
+        })
+        info.to_excel(w, sheet_name='分析信息', index=False)
+        spearman_df.to_excel(w, sheet_name='相关系数矩阵')
+        p_df.to_excel(w,sheet_name='P值矩阵_聚类校正(带权)')
+        lo_df.to_excel(w,sheet_name='置信区间下限')
+        up_df.to_excel(w,sheet_name='置信区间上限')
+        se_df.to_excel(w,sheet_name='标准误')
+        sig_df.to_excel(w,sheet_name='显著性标记')
+        data[columns_to_analyze].describe().to_excel(w, sheet_name='描述统计(未加权)')
+
+    #配对列表
+    rows=[]
+    for i in range(n_vars):
+        for j in range(i+1, n_vars):
+            rows.append({
+                '指标1':columns_to_analyze[i],
+                '指标2':columns_to_analyze[j],
+                '相关系数':corrM[i,j],
+                'P值(聚类校正,带权)':pM[i,j],
+                '95%下限':loM[i,j],
+                '95%上限':upM[i,j],
+                '标准误':seM[i,j],
+                '显著性':sig_df.iloc[i,j],
+                '置信区间包含0': '是' if (np.isfinite(loM[i,j]) and loM[i,j] <= 0 <= upM[i,j]) 
+                else '否'
+            })
+    pairs = pd.DataFrame(rows).sort_values(['P值(聚类校正,带权)','相关系数'], 
+                                           ascending=[True, False])
+    pairs.to_excel('聚类自助法_所有配对结果_带权.xlsx', index=False)
+    sig_pairs = pairs[pairs['P值(聚类校正,带权)']<0.05]
+    if not sig_pairs.empty:
+        sig_pairs.to_excel('聚类自助法_显著配对结果_带权.xlsx', index=False)
+
+    # 可视化
+    plt.figure(figsize=(18,16))
+    sns.heatmap(spearman_df, annot=True, fmt='.2f', 
+                cmap='RdBu_r', center=0, vmin=-1, 
+                vmax=1,square=True, linewidths=0.5, 
+                cbar_kws={"shrink":0.8,"label":"带权Spearman相关"})
+    plt.title('带权Spearman相关系数热力图（聚类自助法）', 
+              fontsize=18, pad=20)
+    plt.xticks(rotation=45, ha='right'); plt.yticks(rotation=0)
+    plt.tight_layout()
+    plt.savefig('聚类自助法_相关系数热力图_带权.png', dpi=300)
+
+    plt.figure(figsize=(18,16))
+    sns.heatmap(p_df, annot=True, fmt='.3f', cmap='YlOrRd_r',
+                vmin=0, vmax=1,square=True, linewidths=0.5, 
+                cbar_kws={"shrink":0.8,"label":"P值（聚类校正,带权）"})
+    plt.title('P值热力图（聚类自助法校正, 带权）', fontsize=18, pad=20)
+    plt.xticks(rotation=45, ha='right'); plt.yticks(rotation=0)
+    plt.tight_layout(); plt.savefig('聚类自助法_P值热力图_带权.png', dpi=300)
+
+    # 显著性热力图
+    sig_numeric = np.zeros((n_vars, n_vars))
+    mapping = {'***':3,'**':2,'*':1,'ns':0,'-':-1}
+    for i in range(n_vars):
+        for j in range(n_vars):
+            sig_numeric[i,j] = mapping.get(sig_df.iloc[i,j], np.nan)
+    plt.figure(figsize=(18,16))
+    cmap = sns.color_palette(['#d4d4d4','#808080','#ffcccc','#ff6666','#ff0000'], 
+                             as_cmap=True)
+    sns.heatmap(sig_numeric, annot=sig_df.values, fmt='s', cmap=cmap, vmin=-1, vmax=3,
+                square=True, linewidths=0.5, cbar_kws={"shrink":0.8,"label":"显著性水平"})
+    cbar = plt.gcf().axes[-1]
+    cbar.set_yticklabels(['对角线','ns','*','**','***'])
+    plt.title('显著性热力图（聚类自助法校正, 带权）', fontsize=18, pad=20)
+    plt.xticks(rotation=45, ha='right'); plt.yticks(rotation=0)
+    plt.tight_layout(); plt.savefig('聚类自助法_显著性热力图_带权.png', dpi=300)
+
+if __name__ == '__main__':
+    main()
+
+
+
+\end{lstlisting}
